@@ -97,7 +97,6 @@ factions:[
 {name:'吳',color:'red',leader:'孫權',relation:{}}
 ],
 turn:1,year:184,gold:3000,food:10000,reputation:50,
-selected:null,mode:null,
 kingdom:{name:'漢'},
 cities:[
 {name:'成都',owner:'蜀',x:3,y:3,hp:10000,agriculture:50,commerce:50,people:70},
@@ -111,16 +110,22 @@ units:[]
 
 function startGame(){
 document.getElementById('titleScreen').style.display='none';
+init();
+startPlayerTurn();
 log('開始遊戲');
 }
 
 function init(){
+GAME.units=[];
 HEROES.forEach((h,i)=>{
 GAME.units.push({hero:h,faction:'蜀',x:3+i,y:3,troops:3000,morale:100,food:3000});
 });
 GAME.units.push({hero:{name:'夏侯惇',war:92,int:65},faction:'魏',x:12,y:4,troops:3000,morale:100,food:3000});
 GAME.units.push({hero:{name:'周瑜',war:80,int:96},faction:'吳',x:16,y:8,troops:3000,morale:100,food:3000});
-});
+renderHeroes();
+drawMap();
+updateUI();
+}
 renderHeroes();
 drawMap();
 updateUI();
@@ -856,18 +861,15 @@ if(u.faction!=='蜀'){
 const enemyCity=GAME.cities.find(c=>c.owner==='蜀');
 if(enemyCity){
 if(Math.abs(enemyCity.x-u.x)<=1 && Math.abs(enemyCity.y-u.y)<=1){
- siege(enemyCity,u);
+siege(enemyCity,u);
 }else{
- u.x += enemyCity.x>u.x?1:-1;
- u.y += enemyCity.y>u.y?1:-1;
+u.x += enemyCity.x>u.x?1:-1;
+u.y += enemyCity.y>u.y?1:-1;
 }
 }
 }
 });
 log('戰略 AI 行動完成');
-}else{
-log('進入正史路線');
-}
 }
 
 function battle(attacker,defender){
@@ -1013,13 +1015,10 @@ GAME.currentFaction='魏';
 log('玩家回合結束');
 aiTurn();
 GAME.currentFaction='蜀';
-startPlayerTurn();
-
 GAME.turn++;
 GAME.year++;
 GAME.gold+=500;
 GAME.food+=800;
-
 GAME.units.forEach(u=>{
  u.food-=100;
  if(u.food<=0){
@@ -1028,36 +1027,13 @@ GAME.units.forEach(u=>{
  }
  personalityEffect(u);
 });
-
 aging();
 illnessCheck();
 deathCheck();
 heirSystem();
 updateUI();
 drawMap();
-log('回合結束');
-}
-GAME.turn++;
-GAME.year++;
-GAME.gold+=500;
-GAME.food+=800;
-
-GAME.units.forEach(u=>{
-u.food-=100;
-if(u.food<=0){
-u.troops-=100;
-log(u.hero.name+' 缺糧損兵');
-}
-personalityEffect(u);
-});
-
-aging();
-illnessCheck();
-deathCheck();
-heirSystem();
-aiTurn();
-updateUI();
-drawMap();
+startPlayerTurn();
 log('回合結束');
 }
 GAME.turn++;
