@@ -85,6 +85,10 @@ const HEROES=[
 ];
 
 const GAME={
+selected:0,
+mode:'idle',
+currentFaction:'蜀',
+tutorialStep:0,
 officials:[],
 prisoners:[],
 factions:[
@@ -1005,6 +1009,34 @@ if(data){Object.assign(GAME,JSON.parse(data));drawMap();updateUI();log('讀檔�
 }
 
 function endTurn(){
+GAME.currentFaction='魏';
+log('玩家回合結束');
+aiTurn();
+GAME.currentFaction='蜀';
+startPlayerTurn();
+
+GAME.turn++;
+GAME.year++;
+GAME.gold+=500;
+GAME.food+=800;
+
+GAME.units.forEach(u=>{
+ u.food-=100;
+ if(u.food<=0){
+  u.troops-=100;
+  log(u.hero.name+' 缺糧損兵');
+ }
+ personalityEffect(u);
+});
+
+aging();
+illnessCheck();
+deathCheck();
+heirSystem();
+updateUI();
+drawMap();
+log('回合結束');
+}
 GAME.turn++;
 GAME.year++;
 GAME.gold+=500;
@@ -1059,6 +1091,44 @@ const alive=GAME.factions.filter(f=>GAME.cities.some(c=>c.owner===f.name));
 if(alive.length===1){
 log(alive[0].name+' 統一天下！');
 }
+}
+
+function showTutorial(){
+const steps=[
+'歡迎進入遊戲，已自動選中君主。',
+'請先按【移動】再點地圖格子。',
+'接近敵軍後可按【攻擊】。',
+'完成後按【結束回合】。'
+];
+if(GAME.tutorialStep<steps.length){
+alert(steps[GAME.tutorialStep]);
+GAME.tutorialStep++;
+}
+}
+
+function startPlayerTurn(){
+GAME.mode='idle';
+log('輪到 '+GAME.currentFaction+' 行動');
+showTutorial();
+highlightSelectedHero();
+}
+
+function highlightSelectedHero(){
+if(GAME.selected!==null && GAME.units[GAME.selected]){
+log('目前選中：'+GAME.units[GAME.selected].hero.name);
+}
+}
+
+function canAct(){
+if(GAME.currentFaction!=='蜀'){
+log('現在不是你的回合');
+return false;
+}
+if(GAME.selected===null){
+log('請先選擇武將');
+return false;
+}
+return true;
 }
 
 function updateUI(){
