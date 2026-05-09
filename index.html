@@ -1,398 +1,464 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>三國志11 Web PK v14 完整版</title>
+<meta charset="UTF-8">
+<title>三國志 Web PK 改良版</title>
 <style>
-:root{--gold:#d4af37;--bg:#111;--panel:#1b1b1b;--line:#6b5520}
-body{margin:0;background:#111;color:#fff;font-family:"Microsoft JhengHei", sans-serif; overflow: hidden;}
-#titleScreen{position:fixed;inset:0;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999}
-#titleScreen button { width: 200px; font-size: 18px; padding: 15px; cursor: pointer; }
-#gameScreen { display: none; height: 100vh; flex-direction: column; }
-.topbar{padding:12px;background:#111;border-bottom:2px solid var(--gold);display:flex;gap:16px;flex-wrap:wrap; font-weight:bold;}
-.layout{display:flex;flex-grow:1; overflow:hidden;}
-.panel{width:320px;background:var(--panel);padding:12px;overflow:auto;border-right:1px solid var(--line); display:flex; flex-direction:column;}
-.map{flex:1;padding:12px;background:#161616;display:flex;flex-direction:column; overflow:auto;}
-.grid{display:grid;grid-template-columns:repeat(20,64px);grid-template-rows:repeat(12,64px);gap:4px; width:fit-content;}
-.cell{width:64px;height:64px;border:1px solid #333;display:flex;align-items:center;justify-content:center;text-align:center;cursor:pointer;background:#2f4f2f; font-size:12px;}
-button{width:100%;padding:10px;margin:4px 0;background:#333;color:#fff;border:1px solid var(--gold); cursor:pointer;}
-button:hover { background: #555; }
-.hero,.card{background:#222;padding:8px;margin:6px 0;border:1px solid #444; cursor:pointer;}
-.hero:hover { border-color: var(--gold); }
-.log{height:220px;background:#000;overflow:auto;padding:10px;margin-top:10px; border:1px solid #333; font-size:13px; color:#2ecc71;}
-.section{color:var(--gold);font-weight:bold;margin:8px 0; border-bottom:1px solid var(--line); padding-bottom:5px;}
+body{margin:0;background:#111;color:#fff;font-family:Microsoft JhengHei}
+button,select{width:100%;padding:8px;margin:4px 0;background:#333;color:#fff;border:1px solid #d4af37}
+.topbar{padding:10px;background:#151515;border-bottom:2px solid #d4af37;display:flex;gap:14px}
+.layout{display:flex;height:calc(100vh - 48px)}
+.panel{width:280px;background:#1b1b1b;padding:10px;overflow:auto}
+.mapBox{flex:1;padding:10px;overflow:auto}
+#map{
+width:500px;height:500px;position:relative;
+background:linear-gradient(135deg,#2f7d32,#1f5f7a);
+border:3px solid #d4af37;margin:auto;
+}
+.city,.unit{
+position:absolute;width:58px;height:58px;border-radius:8px;
+display:flex;align-items:center;justify-content:center;text-align:center;
+font-size:12px;cursor:pointer;color:white;text-shadow:1px 1px #000;
+}
+.city{background:#704214;border:2px solid #ffd54f}
+.unit{background:#333;border:2px solid #fff}
+.selected{outline:3px solid #fff}
+.card,.hero{background:#242424;border:1px solid #555;margin:6px 0;padding:8px}
+.log{height:180px;background:#000;overflow:auto;padding:8px;margin-top:10px}
+.terrain{position:absolute;font-size:20px;opacity:.75}
 </style>
 </head>
+
 <body>
 
-<div id="titleScreen">
-    <h1 style="color:#d4af37;font-size:48px">三國志11 Web PK</h1>
-    <button id="startBtn">開始遊戲</button>
-    <button onclick="toggleScenario()">劇本選單</button>
-    <button onclick="toggleSave()">存檔管理</button>
-    <div id="scenarioPanel" class="card" style="display:none; margin-top:20px; width:200px;"></div>
-    <div id="savePanel" class="card" style="display:none; margin-top:20px; width:200px;"></div>
+<div class="topbar">
+回合:<span id="turn">1</span>
+年份:<span id="year">184</span>
+玩家:<span id="player">未選</span>
+金:<span id="gold">3000</span>
+糧:<span id="food">10000</span>
+模式:<span id="mode">idle</span>
 </div>
 
-<div id="gameScreen">
-    <div class="topbar">
-        <span>回合: <span id="turn">1</span></span>
-        <span>年份: <span id="year">184</span></span>
-        <span style="color:#f1c40f;">金: <span id="gold">3000</span></span>
-        <span style="color:#2ecc71;">糧: <span id="food">10000</span></span>
-        <span>名聲: <span id="rep">50</span></span>
-        <span>國號: <span id="kingdom">漢</span></span>
-    </div>
+<div class="layout">
 
-    <div class="layout">
-        <div class="panel">
-            <div class="section">武將一覽</div>
-            <div id="heroList" style="flex-grow:1; overflow-y:auto;"></div>
-            <button style="background:#27ae60; font-size:16px; padding:15px;" onclick="endTurn()">⏳ 結束回合</button>
-        </div>
+<div class="panel">
+<h3>選擇勢力</h3>
+<select id="factionSelect"></select>
+<button onclick="startGame()">開始遊戲</button>
 
-        <div class="map">
-            <div id="cityPanel" class="card" style="display:none; position:absolute; z-index:100; background:rgba(0,0,0,0.9);"></div>
-            <div id="map" class="grid"></div>
-            <div id="log" class="log"></div>
-        </div>
+<h3>我方武將</h3>
+<div id="heroList"></div>
 
-        <div class="panel">
-            <div class="section">軍略指令</div>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:5px;">
-                <button onclick="recruitTroops()">徵兵</button>
-                <button onclick="trainTroops()">訓練</button>
-                <button onclick="patrolCity()">巡察</button>
-                <button onclick="rewardHero()">賞賜</button>
-                <button onclick="hireHero()">登用</button>
-                <button onclick="triggerEvent()">事件</button>
-            </div>
-            
-            <div class="section" style="margin-top:15px;">外交計略</div>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:5px;">
-                <button onclick="spreadRumor()">流言</button>
-                <button onclick="sowDiscord()">離間</button>
-                <button onclick="makeAlliance()">同盟談判</button>
-                <button onclick="sendTribute()">朝貢談判</button>
-                <button onclick="exchangeHostage()" style="grid-column:span 2;">人質談判</button>
-            </div>
+<h3>內政</h3>
+<button onclick="develop('農業')">開發農業</button>
+<button onclick="develop('商業')">開發商業</button>
+<button onclick="develop('兵營')">開發兵營</button>
+<button onclick="absorbDevelopment()">吸收合併周邊開發</button>
+<button onclick="recruit()">徵兵</button>
+<button onclick="train()">訓練</button>
+<button onclick="endTurn()">結束回合</button>
+</div>
 
-            <div class="section" style="margin-top:15px;">部隊行動</div>
-            <div id="unitDetail" class="card" style="text-align:center; color:#bdc3c7;">未選擇部隊</div>
-            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:5px;">
-                <button style="background:#2980b9;" onclick="setMode('move')">移動</button>
-                <button style="background:#c0392b;" onclick="setMode('attack')">攻擊</button>
-                <button style="background:#8e44ad;" onclick="setMode('strategy')">計略</button>
-            </div>
-        </div>
-    </div>
+<div class="mapBox">
+<h3>500 × 500 天下地圖</h3>
+<div id="map"></div>
+<div id="log" class="log"></div>
+</div>
+
+<div class="panel">
+<h3>軍事操作</h3>
+<div id="unitDetail" class="card">未選部隊</div>
+<div id="cityDetail" class="card">未選城池</div>
+
+<button onclick="setMode('move')">移動</button>
+<button onclick="setMode('attack')">普通攻擊</button>
+
+<h4>戰法</h4>
+<select id="tactic">
+<option value="突擊">突擊：高傷害，耗士氣</option>
+<option value="火矢">火矢：遠距傷害</option>
+<option value="槍突">槍突：近戰破壞</option>
+<option value="齊射">齊射：穩定削兵</option>
+</select>
+<button onclick="setMode('tactic')">使用戰法</button>
+
+<h4>計略</h4>
+<select id="strategy">
+<option value="混亂">混亂：降低士氣</option>
+<option value="偽報">偽報：敵軍後退</option>
+<option value="火計">火計：造成兵損</option>
+<option value="內訌">內訌：高智力成功率</option>
+</select>
+<button onclick="setMode('strategy')">使用計略</button>
+
+<button onclick="setMode('siege')">攻城</button>
+</div>
+
 </div>
 
 <script>
-// --- 資料設定 ---
+const FACTIONS=['曹操','劉備','孫權','袁紹','馬騰','劉表','劉璋','呂布'];
+
+const CITY_DATA=[
+['襄平','公孫瓚',450,30],['北平','公孫瓚',390,60],['薊','袁紹',340,70],
+['南皮','袁紹',310,120],['鄴','袁紹',260,110],['平原','袁紹',320,170],
+['許昌','曹操',240,230],['洛陽','曹操',190,210],['陳留','曹操',270,260],
+['長安','馬騰',120,220],['武威','馬騰',40,100],['天水','馬騰',80,190],
+['成都','劉備',70,360],['漢中','劉備',110,300],['永安','劉備',150,380],
+['江州','劉璋',120,430],['雲南','劉璋',40,460],['襄陽','劉表',220,340],
+['江陵','劉表',240,390],['長沙','劉表',270,450],['建業','孫權',390,370],
+['吳','孫權',450,390],['柴桑','孫權',340,420],['壽春','孫權',350,300],
+['小沛','呂布',310,250],['下邳','呂布',380,260]
+];
+
 const HEROES=[
-    {name:'劉備',war:78,int:88,pol:82,skill:'仁德',loyalty:100,ambition:40,personality:'仁君',age:32,health:100,lifespan:68,relations:{brothers:['關羽','張飛'],spouse:null,enemies:['曹操']}},
-    {name:'關羽',war:98,int:75,pol:62,skill:'神將',loyalty:100,ambition:30,personality:'忠義',age:31,health:100,lifespan:60,relations:{brothers:['劉備','張飛'],spouse:null,enemies:[]}},
-    {name:'張飛',war:99,int:35,pol:30,skill:'鬥神',loyalty:95,ambition:35,personality:'暴烈',age:30,health:100,lifespan:55,relations:{brothers:['劉備','關羽'],spouse:null,enemies:[]}},
-    {name:'諸葛亮',war:38,int:100,pol:98,skill:'神算',loyalty:100,ambition:20,personality:'謹慎',age:27,health:100,lifespan:54,relations:{brothers:[],spouse:null,enemies:[]}}
+['曹操','曹操',72,92,96,'奸雄'],['夏侯惇','曹操',92,65,70,'剛勇'],['張遼','曹操',95,78,72,'威風'],['郭嘉','曹操',32,98,86,'鬼謀'],
+['劉備','劉備',78,88,82,'仁德'],['關羽','劉備',98,75,62,'神將'],['張飛','劉備',99,35,30,'鬥神'],['諸葛亮','劉備',38,100,98,'神算'],
+['孫權','孫權',70,83,89,'制衡'],['周瑜','孫權',80,96,86,'火神'],['陸遜','孫權',70,97,90,'火攻'],['甘寧','孫權',94,72,48,'強襲'],
+['袁紹','袁紹',70,69,75,'名門'],['顏良','袁紹',94,35,25,'猛者'],['文醜','袁紹',93,32,22,'猛者'],['田豐','袁紹',29,94,87,'智囊'],
+['馬騰','馬騰',88,56,52,'騎將'],['馬超','馬騰',97,55,42,'錦馬超'],['龐德','馬騰',94,70,61,'白馬'],
+['劉表','劉表',48,72,82,'名士'],['文聘','劉表',84,72,70,'鐵壁'],['蔡瑁','劉表',70,58,64,'水軍'],
+['劉璋','劉璋',35,62,70,'守成'],['張任','劉璋',88,75,64,'弓將'],['法正','劉璋',40,94,82,'奇謀'],
+['呂布','呂布',100,26,15,'飛將'],['陳宮','呂布',55,92,76,'智謀'],['高順','呂布',88,72,65,'陷陣']
 ];
 
 const GAME={
-    selected:null,
-    mode:'idle',
-    currentFaction:'蜀',
-    tutorialStep:0,
-    officials:[],
-    prisoners:[],
-    factions:[
-        {name:'蜀',color:'green',leader:'劉備',relation:{}},
-        {name:'魏',color:'blue',leader:'曹操',relation:{}},
-        {name:'吳',color:'red',leader:'孫權',relation:{}}
-    ],
-    turn:1, year:184, gold:3000, food:10000, reputation:50, kingdom:{name:'漢'},
-    cities:[
-        {name:'成都',owner:'蜀',x:3,y:3,hp:10000,agriculture:50,commerce:50,people:70},
-        {name:'許昌',owner:'魏',x:12,y:4,hp:10000,agriculture:50,commerce:50,people:70},
-        {name:'建業',owner:'吳',x:16,y:8,hp:10000,agriculture:50,commerce:50,people:70},
-        {name:'漢中',owner:'蜀',x:8,y:6,hp:8000,agriculture:50,commerce:50,people:70}
-    ],
-    units:[]
+player:null,turn:1,year:184,gold:3000,food:10000,
+mode:'idle',selectedUnit:null,selectedCity:null,
+cities:[],units:[]
 };
 
-// --- 初始化與啟動 ---
-function startGame() {
-    document.getElementById('titleScreen').style.display = 'none';
-    document.getElementById('gameScreen').style.display = 'flex';
-    init();
-    startPlayerTurn();
-    log('遊戲開始，進入戰場。');
+function setup(){
+const s=document.getElementById('factionSelect');
+FACTIONS.forEach(f=>{
+let o=document.createElement('option');
+o.value=f;o.textContent=f;s.appendChild(o);
+});
+drawEmptyMap();
 }
 
-function init(){
-    GAME.units=[];
-    HEROES.forEach((h,i)=>{
-        GAME.units.push({hero:h, faction:'蜀', x:3+i, y:3, troops:3000, morale:100, food:3000});
-    });
-    GAME.units.push({hero:{name:'夏侯惇',war:92,int:65}, faction:'魏', x:12, y:4, troops:3000, morale:100, food:3000});
-    GAME.units.push({hero:{name:'周瑜',war:80,int:96}, faction:'吳', x:16, y:8, troops:3000, morale:100, food:3000});
-    renderHeroes();
-    drawMap();
-    updateUI();
+function startGame(){
+GAME.player=document.getElementById('factionSelect').value;
+GAME.turn=1;GAME.year=184;GAME.gold=3000;GAME.food=10000;
+GAME.cities=CITY_DATA.map(c=>({
+name:c[0],owner:c[1],x:c[2],y:c[3],
+hp:10000,agri:50,commerce:50,barrack:50,people:70,
+merged:false
+}));
+GAME.units=[];
+HEROES.forEach((h,i)=>{
+let city=GAME.cities.find(c=>c.owner===h[1]);
+if(city){
+GAME.units.push({
+hero:{name:h[0],war:h[2],int:h[3],pol:h[4],skill:h[5]},
+faction:h[1],
+x:city.x+Math.random()*30-15,
+y:city.y+Math.random()*30-15,
+troops:3000,morale:100,food:2500
+});
+}
+});
+log('你選擇 '+GAME.player+' 勢力');
+render();
 }
 
-// --- 介面與地圖 ---
+function drawEmptyMap(){
+const map=document.getElementById('map');
+map.innerHTML='';
+const terrains=[
+['🌲',80,80],['⛰️',170,140],['🌊',300,190],['🌲',400,120],
+['⛰️',90,300],['🌊',350,360],['🌾',230,460],['🔥',420,440]
+];
+terrains.forEach(t=>{
+let d=document.createElement('div');
+d.className='terrain';
+d.style.left=t[1]+'px';
+d.style.top=t[2]+'px';
+d.textContent=t[0];
+map.appendChild(d);
+});
+}
+
+function render(){
+drawEmptyMap();
+renderCities();
+renderUnits();
+renderHeroes();
+updateUI();
+}
+
+function renderCities(){
+const map=document.getElementById('map');
+GAME.cities.forEach(c=>{
+let d=document.createElement('div');
+d.className='city';
+d.style.left=c.x+'px';
+d.style.top=c.y+'px';
+d.style.background=color(c.owner);
+d.innerHTML=`🏯<br>${c.name}<br>${c.owner}`;
+d.onclick=()=>selectCity(c);
+map.appendChild(d);
+});
+}
+
+function renderUnits(){
+const map=document.getElementById('map');
+GAME.units.forEach((u,i)=>{
+let d=document.createElement('div');
+d.className='unit';
+if(GAME.selectedUnit===i)d.classList.add('selected');
+d.style.left=u.x+'px';
+d.style.top=u.y+'px';
+d.style.background=color(u.faction);
+d.innerHTML=`⚔️<br>${u.hero.name}<br>${u.troops}`;
+d.onclick=()=>unitClick(i);
+map.appendChild(d);
+});
+}
+
 function renderHeroes(){
-    const box=document.getElementById('heroList');
-    box.innerHTML='';
-    HEROES.forEach((h,i)=>{
-        const div=document.createElement('div');
-        div.className='hero';
-        div.innerHTML=`<b>${h.name}</b><br>武:${h.war} 智:${h.int} 政:${h.pol}<br>★${h.skill}`;
-        div.onclick=()=>selectUnit(i);
-        box.appendChild(div);
-    });
+const box=document.getElementById('heroList');
+box.innerHTML='';
+GAME.units.forEach((u,i)=>{
+if(u.faction!==GAME.player)return;
+let d=document.createElement('div');
+d.className='hero';
+d.innerHTML=`<b>${u.hero.name}</b><br>武:${u.hero.war} 智:${u.hero.int} 政:${u.hero.pol}<br>兵:${u.troops} 士:${u.morale}<br>技:${u.hero.skill}`;
+d.onclick=()=>selectUnit(i);
+box.appendChild(d);
+});
 }
 
 function selectUnit(i){
-    GAME.selected=i;
-    const u=GAME.units[i];
-    document.getElementById('unitDetail').innerHTML=`
-    <b style="color:var(--gold); font-size:16px;">${u.hero.name}</b><br>
-    兵力:${u.troops} | 士氣:${u.morale} | 糧食:${u.food}`;
-    log('選擇 '+u.hero.name);
+GAME.selectedUnit=i;
+showUnit();
+render();
 }
 
-function terrain(x,y){
-    const list=['平原','森林','山地','河流'];
-    return list[(x+y)%4];
+function unitClick(i){
+if(GAME.selectedUnit===null){
+selectUnit(i);return;
+}
+const actor=GAME.units[GAME.selectedUnit];
+const target=GAME.units[i];
+
+if(actor.faction!==GAME.player){
+log('只能操作自己勢力');return;
 }
 
-function drawMap(){
-    const map=document.getElementById('map');
-    map.innerHTML='';
-    for(let y=0;y<12;y++){
-        for(let x=0;x<20;x++){
-            const cell=document.createElement('div');
-            cell.className='cell';
-            const city=GAME.cities.find(c=>c.x===x&&c.y===y);
-            const unit=GAME.units.find(u=>u.x===x&&u.y===y);
-            
-            if(city){
-                const ownerMark = city.owner==='蜀'?'🟢':city.owner==='魏'?'🔵':'🔴';
-                cell.style.border='2px solid '+(city.owner==='蜀'?'green':city.owner==='魏'?'blue':'red');
-                cell.innerHTML=ownerMark+'🏯<br>'+city.name;
-                cell.onclick=()=>openCity(city);
-            }else if(unit){
-                cell.innerHTML='⚔<br>'+unit.hero.name;
-                cell.style.color = unit.faction==='蜀'?'#2ecc71':unit.faction==='魏'?'#3498db':'#e74c3c';
-                cell.onclick=()=>mapClick(x,y);
-            }else{
-                cell.innerText=terrain(x,y);
-                cell.onclick=()=>mapClick(x,y);
-            }
-            map.appendChild(cell);
-        }
-    }
+if(GAME.mode==='attack')normalAttack(actor,target);
+else if(GAME.mode==='tactic')useTactic(actor,target);
+else if(GAME.mode==='strategy')useStrategy(actor,target);
+else selectUnit(i);
+
+render();
+checkWin();
 }
 
-function openCity(city){
-    const panel=document.getElementById('cityPanel');
-    panel.style.display='block';
-    panel.innerHTML=`
-    <b style="color:var(--gold); font-size:18px;">${city.name}</b><br>
-    耐久:${city.hp}<br>農業:${city.agriculture}<br>
-    商業:${city.commerce}<br>民心:${city.people}<br>
-    <button onclick="document.getElementById('cityPanel').style.display='none'" style="margin-top:10px;">關閉</button>`;
+function selectCity(c){
+GAME.selectedCity=c;
+document.getElementById('cityDetail').innerHTML=
+`<b>${c.name}</b><br>勢力:${c.owner}<br>耐久:${c.hp}<br>農業:${c.agri}<br>商業:${c.commerce}<br>兵營:${c.barrack}<br>民心:${c.people}<br>合併:${c.merged?'已完成':'未完成'}`;
+
+if(GAME.mode==='siege' && GAME.selectedUnit!==null){
+let u=GAME.units[GAME.selectedUnit];
+if(u.faction===GAME.player && c.owner!==GAME.player){
+let dist=distance(u,c);
+if(dist>80)return log('距離太遠，無法攻城');
+let dmg=Math.floor(u.hero.war*25+u.troops*0.1);
+c.hp-=dmg;
+u.morale-=10;
+log(`${u.hero.name} 攻打 ${c.name}，耐久 -${dmg}`);
+if(c.hp<=0){
+c.owner=u.faction;
+c.hp=7000;
+log(`${c.name} 被 ${u.faction} 佔領`);
+}
+render();
+}
+}
 }
 
-function mapClick(x,y){
-    if(GAME.selected===null) return;
-    const myUnit=GAME.units[GAME.selected];
-    const enemy=GAME.units.find((u,i)=>u.x===x&&u.y===y&&i!==GAME.selected);
-
-    if(GAME.mode==='move'){
-        if(!enemy && !GAME.cities.find(c=>c.x===x&&c.y===y)){
-            myUnit.x=x; myUnit.y=y;
-            log(myUnit.hero.name+' 移動完成');
-        } else {
-            log('目標地點已有部隊或城池！');
-        }
-    }
-
-    if(GAME.mode==='attack' && enemy){
-        battle(myUnit,enemy);
-    }
-    
-    GAME.mode='idle';
-    drawMap();
-    updateUI();
+function showUnit(){
+let u=GAME.units[GAME.selectedUnit];
+document.getElementById('unitDetail').innerHTML=
+`<b>${u.hero.name}</b><br>勢力:${u.faction}<br>武:${u.hero.war} 智:${u.hero.int} 政:${u.hero.pol}<br>兵力:${u.troops}<br>士氣:${u.morale}<br>糧食:${u.food}<br>特技:${u.hero.skill}`;
 }
 
-function setMode(mode){
-    if(GAME.selected === null) { log('請先從左側選擇武將部隊！'); return; }
-    GAME.mode=mode;
-    log('切換模式：'+mode+' (請點擊地圖目標)');
+function setMode(m){
+GAME.mode=m;
+log('模式切換：'+m);
+updateUI();
 }
 
-// --- 內政與計略指令 ---
-function recruitTroops(){
-    if(GAME.selected===null) return log('請先選擇武將');
-    if(GAME.gold<300) return log('金錢不足');
-    let unit=GAME.units[GAME.selected];
-    unit.troops+=500; GAME.gold-=300;
-    log(unit.hero.name+' 徵兵 +500'); updateUI(); selectUnit(GAME.selected);
+function normalAttack(a,d){
+if(a.faction===d.faction)return log('不能攻擊友軍');
+if(distance(a,d)>70)return log('距離太遠');
+let dmg=Math.max(200,Math.floor(a.hero.war*12-d.hero.war*5+Math.random()*500));
+d.troops-=dmg;
+a.morale-=5;
+log(`${a.hero.name} 普攻 ${d.hero.name}，傷害 ${dmg}`);
+removeDead();
 }
 
-function trainTroops(){
-    if(GAME.selected===null) return log('請先選擇武將');
-    let unit=GAME.units[GAME.selected];
-    unit.morale+=10;
-    log(unit.hero.name+' 訓練完成，士氣上升'); selectUnit(GAME.selected);
+function useTactic(a,d){
+if(a.faction===d.faction)return log('不能攻擊友軍');
+let t=document.getElementById('tactic').value;
+let cost=15,dmg=0;
+
+if(t==='突擊')dmg=a.hero.war*18+500;
+if(t==='火矢')dmg=a.hero.war*10+a.hero.int*8;
+if(t==='槍突')dmg=a.hero.war*16+300;
+if(t==='齊射')dmg=a.hero.war*12+400;
+
+if(a.morale<cost)return log('士氣不足');
+a.morale-=cost;
+d.troops-=Math.floor(dmg);
+log(`${a.hero.name} 使用戰法【${t}】，${d.hero.name} 損兵 ${Math.floor(dmg)}`);
+removeDead();
 }
 
-function patrolCity(){
-    let city=GAME.cities[0]; city.people+=5;
-    log(city.name+' 巡察完成，民心提升');
+function useStrategy(a,d){
+if(a.faction===d.faction)return log('不能對友軍用計');
+let s=document.getElementById('strategy').value;
+let success=a.hero.int+Math.random()*60>d.hero.int+Math.random()*50;
+if(!success){
+a.morale-=8;
+log(`${a.hero.name} 使用【${s}】失敗`);
+return;
 }
 
-function rewardHero(){
-    if(GAME.selected===null) return log('請先選擇武將');
-    if(GAME.gold<200) return log('金錢不足');
-    GAME.gold-=200;
-    log(GAME.units[GAME.selected].hero.name+' 獲得賞賜'); updateUI();
+if(s==='混亂'){d.morale-=35;log(`${d.hero.name} 混亂，士氣大降`);}
+if(s==='偽報'){d.x+=30;d.y+=30;log(`${d.hero.name} 中偽報後退`);}
+if(s==='火計'){d.troops-=700;log(`${d.hero.name} 中火計，損兵700`);}
+if(s==='內訌'){d.troops-=500;d.morale-=20;log(`${d.hero.name} 內訌，兵力與士氣下降`);}
+removeDead();
 }
 
-function hireHero(){
-    const newHero={name:'徐庶',war:60,int:92,pol:80,skill:'智將'};
-    if(!HEROES.find(h=>h.name==='徐庶')) {
-        HEROES.push(newHero);
-        GAME.units.push({hero:newHero,faction:'蜀',x:4,y:4,troops:2000,morale:80,food:2000});
-        renderHeroes(); drawMap();
-        log('成功登用 徐庶');
-    } else {
-        log('無在野武將可登用');
-    }
+function develop(type){
+if(!GAME.selectedCity)return log('請先點選我方城池');
+let c=GAME.selectedCity;
+if(c.owner!==GAME.player)return log('只能開發我方城池');
+if(GAME.gold<500)return log('金不足');
+GAME.gold-=500;
+if(type==='農業')c.agri+=10;
+if(type==='商業')c.commerce+=10;
+if(type==='兵營')c.barrack+=10;
+c.people+=2;
+log(`${c.name} 開發${type}完成`);
+selectCity(c);updateUI();
 }
 
-function spreadRumor(){
-    let enemy=GAME.units.find(u=>u.faction!=='蜀');
-    if(enemy){ enemy.morale-=15; log('成功散播流言，敵軍士氣下降'); }
+function absorbDevelopment(){
+if(!GAME.selectedCity)return log('請先點選城池');
+let c=GAME.selectedCity;
+if(c.owner!==GAME.player)return log('只能合併我方城池');
+if(c.merged)return log('此城已吸收合併過');
+if(GAME.gold<1000)return log('金不足');
+GAME.gold-=1000;
+c.agri+=20;c.commerce+=20;c.barrack+=20;c.people+=10;c.merged=true;
+log(`${c.name} 完成周邊開發吸收合併，資源上升`);
+selectCity(c);updateUI();
 }
 
-function sowDiscord(){
-    let enemy=GAME.units.find(u=>u.faction!=='蜀');
-    if(enemy){ enemy.troops-=200; log('成功離間敵軍，敵軍兵力減少'); }
+function recruit(){
+if(GAME.selectedUnit===null)return log('請先選武將');
+let u=GAME.units[GAME.selectedUnit];
+if(u.faction!==GAME.player)return log('只能操作我方');
+if(GAME.gold<300)return log('金不足');
+GAME.gold-=300;
+u.troops+=600;
+log(`${u.hero.name} 徵兵 +600`);
+render();
 }
 
-function makeAlliance(){ log('派出使者前往魏國進行同盟談判...'); }
-function sendTribute(){ 
-    if(GAME.gold>=500) { GAME.gold-=500; log('送出朝貢，外交關係改善'); updateUI(); }
-    else { log('金錢不足以朝貢'); }
-}
-function exchangeHostage(){ GAME.prisoners.push('外交人質'); log('交換人質完成'); }
-
-// --- 戰鬥與事件 ---
-function battle(attacker,defender){
-    if(attacker.faction===defender.faction){ log('不能攻擊友軍'); return; }
-    let atk=Math.floor(attacker.hero.war*10*Math.random());
-    let def=Math.floor(defender.hero.war*8*Math.random());
-    let damage=Math.max(100,atk-def);
-
-    defender.troops-=damage;
-    log(`⚔️ ${attacker.hero.name} 攻擊 ${defender.hero.name}，造成 ${damage} 傷害`);
-
-    if(defender.troops<=0){
-        log(`💀 ${defender.hero.name} 部隊潰滅`);
-        GAME.units=GAME.units.filter(u=>u!==defender);
-        GAME.selected = null; document.getElementById('unitDetail').innerHTML="未選擇部隊";
-    }
+function train(){
+if(GAME.selectedUnit===null)return log('請先選武將');
+let u=GAME.units[GAME.selectedUnit];
+u.morale=Math.min(120,u.morale+15);
+log(`${u.hero.name} 訓練完成`);
+render();
 }
 
-function triggerEvent(){
-    const storyEvents=['桃園結義','三顧茅廬','官渡之戰','赤壁之戰','空城計'];
-    const event=storyEvents[Math.floor(Math.random()*storyEvents.length)];
-    log('📜 劇情事件觸發：'+event);
-}
-
-// --- 回合與系統 ---
 function endTurn(){
-    log('--- 玩家回合結束 ---');
-    aiTurn();
-    
-    GAME.turn++; GAME.year++;
-    GAME.gold+=500; GAME.food+=800;
+GAME.turn++;
+GAME.year++;
+let cityCount=GAME.cities.filter(c=>c.owner===GAME.player).length;
+let agri=GAME.cities.filter(c=>c.owner===GAME.player).reduce((s,c)=>s+c.agri,0);
+let comm=GAME.cities.filter(c=>c.owner===GAME.player).reduce((s,c)=>s+c.commerce,0);
+GAME.gold+=300+comm*2;
+GAME.food+=500+agri*3;
 
-    GAME.units.forEach(u=>{
-        u.food-=100;
-        if(u.food<=0){ u.troops-=100; log('⚠️ '+u.hero.name+' 缺糧損兵'); }
-    });
+GAME.units.forEach(u=>{
+u.food-=100;
+if(u.food<=0){u.troops-=100;log(`${u.hero.name} 缺糧損兵`);}
+});
 
-    updateUI(); drawMap();
-    log(`--- 第 ${GAME.turn} 回合開始 ---`);
-    GAME.selected = null; document.getElementById('unitDetail').innerHTML="未選擇部隊";
+aiTurn();
+log('回合結束');
+render();
+checkWin();
 }
 
 function aiTurn(){
-    GAME.units.forEach((u)=>{
-        if(u.faction!=='蜀'){
-            let target=GAME.cities.find(c=>c.owner!==(u.faction));
-            if(target){
-                u.x += target.x>u.x?1:(target.x<u.x?-1:0);
-                u.y += target.y>u.y?1:(target.y<u.y?-1:0);
-            }
-        }
-    });
-    log('🤖 敵方勢力行動完成');
+GAME.units.forEach(u=>{
+if(u.faction===GAME.player)return;
+let target=GAME.units.find(x=>x.faction===GAME.player);
+if(!target)return;
+if(distance(u,target)<70){
+normalAttack(u,target);
+}else{
+u.x += target.x>u.x?15:-15;
+u.y += target.y>u.y?15:-15;
+}
+});
+log('其他勢力行動完成');
 }
 
-function startPlayerTurn(){
-    GAME.mode='idle';
-    log('輪到 '+GAME.currentFaction+' 行動');
-    if(GAME.tutorialStep === 0) {
-        alert('歡迎進入遊戲！\n1. 點擊左側武將選擇部隊。\n2. 點擊右側【移動】或【攻擊】。\n3. 點擊地圖目標執行。\n4. 完成後按【結束回合】。');
-        GAME.tutorialStep++;
-    }
+function removeDead(){
+GAME.units=GAME.units.filter(u=>{
+if(u.troops<=0){log(`${u.hero.name} 部隊潰滅`);return false;}
+return true;
+});
+}
+
+function checkWin(){
+let enemies=GAME.cities.filter(c=>c.owner!==GAME.player);
+if(enemies.length===0)alert('勝利！你統一天下！');
+let myCities=GAME.cities.filter(c=>c.owner===GAME.player);
+if(myCities.length===0)alert('敗北！你的勢力滅亡');
+}
+
+function distance(a,b){
+return Math.hypot(a.x-b.x,a.y-b.y);
+}
+
+function color(f){
+return {
+'曹操':'#2563eb','劉備':'#16a34a','孫權':'#dc2626','袁紹':'#9333ea',
+'馬騰':'#f59e0b','劉表':'#0891b2','劉璋':'#65a30d','呂布':'#991b1b',
+'公孫瓚':'#60a5fa'
+}[f] || '#555';
 }
 
 function updateUI(){
-    document.getElementById('turn').innerText=GAME.turn;
-    document.getElementById('year').innerText=GAME.year;
-    document.getElementById('gold').innerText=GAME.gold;
-    document.getElementById('food').innerText=GAME.food;
-    document.getElementById('rep').innerText=GAME.reputation;
-    document.getElementById('kingdom').innerText=GAME.kingdom.name;
+document.getElementById('turn').innerText=GAME.turn;
+document.getElementById('year').innerText=GAME.year;
+document.getElementById('player').innerText=GAME.player||'未選';
+document.getElementById('gold').innerText=GAME.gold;
+document.getElementById('food').innerText=GAME.food;
+document.getElementById('mode').innerText=GAME.mode;
 }
 
 function log(msg){
-    const box=document.getElementById('log');
-    box.innerHTML+=`<div>> ${msg}</div>`;
-    box.scrollTop=box.scrollHeight;
+const box=document.getElementById('log');
+box.innerHTML+=`<div>> ${msg}</div>`;
+box.scrollTop=box.scrollHeight;
 }
 
-function toggleScenario(){
-    const p=document.getElementById('scenarioPanel');
-    p.style.display=p.style.display==='none'?'block':'none';
-    p.innerHTML=`
-    <button onclick="log('載入劇本：黃巾之亂')">黃巾之亂</button>
-    <button onclick="log('載入劇本：赤壁之戰')">赤壁之戰</button>`;
-}
-
-function toggleSave(){
-    const p=document.getElementById('savePanel');
-    p.style.display=p.style.display==='none'?'block':'none';
-    p.innerHTML=`
-    <button onclick="log('存檔完成')">儲存進度</button>
-    <button onclick="log('讀檔完成')">載入進度</button>`;
-}
-
-// 綁定開始按鈕
-document.addEventListener('DOMContentLoaded', function () {
-    const btn = document.getElementById('startBtn');
-    if (btn) {
-        btn.addEventListener('click', startGame);
-    }
-});
+setup();
 </script>
+
 </body>
 </html>
