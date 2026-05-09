@@ -23,7 +23,7 @@ button{width:100%;padding:10px;margin:4px 0;background:#333;color:#fff;border:1p
 <body>
 <div id="titleScreen">
 <h1 style="color:#d4af37;font-size:48px">三國志11 Web PK</h1>
-<button onclick="startGame()">開始遊戲</button>
+<button id="startBtn">開始遊戲</button>
 <button onclick="toggleScenario()">劇本選單</button>
 <button onclick="toggleSave()">存檔管理</button>
 </div>
@@ -108,11 +108,17 @@ cities:[
 units:[]
 };
 
-function startGame(){
-document.getElementById('titleScreen').style.display='none';
-init();
-startPlayerTurn();
-log('開始遊戲');
+function startGame() {
+    const title = document.getElementById('titleScreen');
+    const game = document.getElementById('gameScreen');
+
+    if (title) title.style.display = 'none';
+    if (game) game.style.display = 'block';
+
+    init();
+    startPlayerTurn();
+
+    console.log('遊戲開始');
 }
 
 function init(){
@@ -1126,3 +1132,16 @@ init();
 </script>
 </body>
 </html>
+
+document.addEventListener('DOMContentLoaded', function () {
+    const btn = document.getElementById('startBtn');
+
+    if (btn) {
+        btn.addEventListener('click', function () {
+            console.log('開始遊戲按下');
+            startGame();
+        });
+    } else {
+        console.error('找不到開始按鈕');
+    }
+});
