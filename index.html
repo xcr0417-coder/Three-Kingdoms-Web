@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<title>三國志11風格 Web 原創版 v3</title>
+<title>三國志11風格 Web 原創版 v4</title>
 <style>
 body{margin:0;background:#111;color:#fff;font-family:Microsoft JhengHei}
 #topbar{height:44px;background:#222;display:flex;justify-content:space-around;align-items:center;border-bottom:1px solid #555}
@@ -11,16 +11,16 @@ body{margin:0;background:#111;color:#fff;font-family:Microsoft JhengHei}
 .cell{width:30px;height:30px;border:1px solid #222;box-sizing:border-box;text-align:center;line-height:30px;cursor:pointer;font-size:17px}
 .plain{background:#2f7d32}.forest{background:#1b5e20}.mountain{background:#555}.water{background:#1565c0}.road{background:#8d6e63}.city{background:#ffd54f;color:#000}
 .selected{outline:3px solid white}.range{outline:2px solid #00e676}.danger{outline:2px solid red}
-#side{width:390px;height:600px;overflow:auto;background:#1b1b1b;padding:12px;border-left:1px solid #555}
+#side{width:410px;height:600px;overflow:auto;background:#1b1b1b;padding:12px;border-left:1px solid #555}
 button{width:100%;margin-top:6px;padding:8px;background:#333;color:white;border:1px solid #777;cursor:pointer}
-button:hover{background:#555}.yellow{color:#ffd54f}.red{color:#ff6b6b}.green{color:#69f0ae}.small{font-size:12px;color:#aaa}
+button:hover{background:#555}.small{font-size:12px;color:#aaa}.yellow{color:#ffd54f}.red{color:#ff6b6b}.green{color:#69f0ae}
 #log{max-height:160px;overflow:auto;background:#0b0b0b;padding:8px;border:1px solid #444}
 </style>
 </head>
 <body>
 
 <div id="topbar">
-  <div>三國志11風格 Web 原創版 v3</div>
+  <div>三國志11風格 Web 原創版 v4</div>
   <div>回合：<span id="turn">1</span></div>
   <div>勢力：<span id="factionName">劉備軍</span></div>
 </div>
@@ -32,6 +32,9 @@ button:hover{background:#555}.yellow{color:#ffd54f}.red{color:#ff6b6b}.green{col
     <div id="info">請點選城池或部隊。</div>
     <hr>
     <button onclick="endTurn()">結束回合</button>
+    <button onclick="saveGame()">存檔</button>
+    <button onclick="loadGame()">讀檔</button>
+    <button onclick="clearSave()">清除存檔</button>
     <button onclick="restartGame()">重新開始</button>
     <hr>
     <h3>戰報</h3>
@@ -44,7 +47,7 @@ button:hover{background:#555}.yellow{color:#ffd54f}.red{color:#ff6b6b}.green{col
 
 <script>
 const W=20,H=20;
-let turn=1,currentFaction="劉備";
+let turn=1,currentFaction="劉備",gameOver=false;
 const factions=["劉備","曹操","孫權"];
 let selectedUnit=null,selectedCity=null,actionMode="normal";
 let map=[];
@@ -134,6 +137,7 @@ function icon(f){return f==="劉備"?"🟩":f==="曹操"?"🟦":"🟥";}
 function dist(a,b,c,d){return Math.abs(a-c)+Math.abs(b-d);}
 
 function clickCell(x,y){
+  if(gameOver)return;
   const unit=units.find(u=>u.x===x&&u.y===y&&u.hp>0);
   const city=cities.find(c=>c.x===x&&c.y===y);
 
@@ -163,7 +167,7 @@ function showCity(city){
   <p>所屬：${city.owner||"無"}</p>
   <p>金錢：${city.gold}</p>
   <p>糧草：${city.food}</p>
-  <p>兵力：${city.soldiers}</p>
+  <p>守軍：${city.soldiers}</p>
   <p>城防：${city.def}</p>
   <p>技巧點：${tech[currentFaction].point}</p>
   <p>已研究：${tech[currentFaction].learned.join("、")||"無"}</p>`;
@@ -173,7 +177,7 @@ function showCity(city){
     <button onclick="developCity('market')">開發市場：金錢 +300</button>
     <button onclick="developCity('farm')">開發農場：糧草 +600</button>
     <button onclick="developCity('wall')">修城防：城防 +200</button>
-    <button onclick="recruit()">徵兵：金錢 -300，兵力 +1000</button>
+    <button onclick="recruit()">徵兵：金錢 -300，守軍 +1000</button>
     <hr>
     ${Object.keys(techList).map(t=>`<button onclick="researchTech('${t}')">研究 ${t}（${techList[t].cost}）</button>`).join("")}
     <hr>
@@ -236,7 +240,7 @@ function deploy(name,type){
   let city=cities.find(c=>c.name===o.city);
   let tile=findDeployTile(city);
   if(!tile){log("城池周圍沒有可出陣格。");return;}
-  if(city.soldiers<1000){log("兵力不足。");return;}
+  if(city.soldiers<1000){log("守軍不足。");return;}
 
   city.soldiers-=1000;
   o.deployed=true;
@@ -342,15 +346,18 @@ function defeat(u){
 function captureCity(u){
   let city=cities.find(c=>c.x===u.x&&c.y===u.y);
   if(city&&city.owner!==u.faction){
-    if(city.soldiers>0){
-      let loss=Math.min(city.soldiers,Math.floor(u.hp*0.4));
-      city.soldiers-=loss;
-      u.hp-=Math.floor(loss*0.3);
-      log(`${u.name} 攻擊 ${city.name} 守軍，守軍 -${loss}。`);
-    }
-    if(city.soldiers<=0){
+    let attackPower=Math.floor(u.hp*0.4+u.atk*3);
+    let defLoss=Math.min(city.def,Math.floor(attackPower*0.3));
+    let soldierLoss=Math.min(city.soldiers,attackPower);
+    city.def-=defLoss;
+    city.soldiers-=soldierLoss;
+    u.hp-=Math.floor((city.def+city.soldiers>0)?soldierLoss*0.15:soldierLoss*0.05);
+    log(`${u.name} 攻擊 ${city.name}，守軍 -${soldierLoss}，城防 -${defLoss}。`);
+
+    if(city.soldiers<=0&&city.def<=0){
       city.owner=u.faction;
-      city.def=Math.floor(city.def*0.7);
+      city.def=300;
+      city.soldiers=0;
       log(`${u.name} 佔領 ${city.name}！`);
     }
   }
@@ -422,7 +429,7 @@ function aiTurn(){
     if(dist(u.x,u.y,t.x,t.y)<=1){
       let dmg=Math.max(60,Math.floor(u.atk*8-t.def*2));
       t.hp-=dmg;u.acted=true;
-      log(`${u.name} 攻擊 ${t.name}。`);
+      log(`${u.name} 攻擊 ${t.name}，造成 ${dmg} 傷害。`);
       if(t.hp<=0)defeat(t);
     }else{
       let dx=Math.sign(t.x-u.x),dy=Math.sign(t.y-u.y);
@@ -448,6 +455,7 @@ function deployAI(name,type){
 }
 
 function endTurn(){
+  if(gameOver)return;
   selectedUnit=null;selectedCity=null;actionMode="normal";
   let idx=factions.indexOf(currentFaction);
   currentFaction=factions[(idx+1)%factions.length];
@@ -466,13 +474,14 @@ function endTurn(){
   document.getElementById("info").innerHTML=`<p>${currentFaction}軍回合。</p>`;
 
   if(currentFaction!=="劉備"||delegated[currentFaction]){
-    setTimeout(()=>{aiTurn();drawMap();checkWin();setTimeout(endTurn,400);},300);
+    setTimeout(()=>{aiTurn();drawMap();checkWin();setTimeout(endTurn,450);},300);
   }
 }
 
 function checkWin(){
   let owners=[...new Set(cities.map(c=>c.owner).filter(Boolean))];
   if(owners.length===1&&cities.every(c=>c.owner===owners[0])){
+    gameOver=true;
     alert(owners[0]+"軍統一天下！");
   }
 }
@@ -480,6 +489,29 @@ function checkWin(){
 function log(t){
   const box=document.getElementById("log");
   box.innerHTML=`<p>${t}</p>`+box.innerHTML;
+}
+
+function saveGame(){
+  const data={turn,currentFaction,gameOver,delegated,tech,cities,officers,units};
+  localStorage.setItem("tk_save_v4",JSON.stringify(data));
+  log("遊戲已存檔。");
+}
+
+function loadGame(){
+  const raw=localStorage.getItem("tk_save_v4");
+  if(!raw){log("沒有存檔。");return;}
+  const d=JSON.parse(raw);
+  turn=d.turn;currentFaction=d.currentFaction;gameOver=d.gameOver;
+  delegated=d.delegated;tech=d.tech;cities=d.cities;officers=d.officers;units=d.units;
+  selectedUnit=null;selectedCity=null;actionMode="normal";
+  drawMap();
+  document.getElementById("info").innerHTML="<p>讀檔完成。</p>";
+  log("遊戲已讀檔。");
+}
+
+function clearSave(){
+  localStorage.removeItem("tk_save_v4");
+  log("存檔已清除。");
 }
 
 function restartGame(){location.reload();}
