@@ -2,746 +2,619 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<title>三國志11 Web 威力加強版 </title>
+<title>三國志11 Web 威力加強版</title>
 <style>
-body{margin:0;background:#111;color:#fff;font-family:'PingFang TC','Microsoft JhengHei',sans-serif;overflow:hidden}
-#topbar{height:45px;background:linear-gradient(to bottom,#333,#111);display:flex;justify-content:space-around;align-items:center;border-bottom:2px solid #555;box-shadow:0 2px 10px rgba(0,0,0,.5)}
-#game{display:flex;height:calc(100vh - 45px)}
-#map-container{flex:1;overflow:auto;display:flex;justify-content:center;align-items:center;background:#050505}
-#map{width:500px;height:500px;display:grid;grid-template-columns:repeat(50,10px);background:#222;border:2px solid #555;user-select:none}
-.cell{width:10px;height:10px;font-size:8px;text-align:center;cursor:pointer;position:relative}
-.cell:hover{filter:brightness(1.5);z-index:2;transform:scale(1.2)}
-.plain{background:#2f7d32}.forest{background:#1f6f2f}.mountain{background:#545454}.river{background:#1f4fff}
-.city{box-shadow:inset 0 0 0 2px #ffd54f}
-.unit{background:#00bcd4!important;color:#fff;font-weight:bold}
-.enemy{background:#b71c1c!important;color:#fff;font-weight:bold}
-.selected{outline:2px solid #fff;z-index:10;box-shadow:0 0 8px #fff}
-.acted{filter:grayscale(100%) opacity(.6)}
-.reachable{background:rgba(105,240,174,.4)!important}
-.attackable{background:rgba(255,82,82,.4)!important}
-#side{width:320px;background:#1a1a1a;padding:15px;overflow-y:auto;border-left:2px solid #444}
-button,select{width:100%;margin-top:6px;padding:8px;background:linear-gradient(to bottom,#444,#222);color:#fff;border:1px solid #666;cursor:pointer;border-radius:4px;font-weight:bold;transition:.2s}
-button:hover{background:#555;border-color:#ffd54f}
-#panel,#log{background:#0a0a0a;padding:10px;margin-bottom:10px;border:1px solid #444;border-radius:4px;font-size:13px;line-height:1.5}
-#log{max-height:160px;overflow-y:auto;color:#bbb}
-.log-entry{border-bottom:1px solid #333;padding:3px 0}
-.skill{animation:flash .3s 3}
-@keyframes flash{0%{opacity:1}100%{background:#ff5722;opacity:.2}}
+  :root { --hex-w: 40px; --hex-h: 46px; --bg-color: #0b0d10; }
+  body { margin: 0; background: var(--bg-color); color: #eee; font-family: 'PingFang TC', sans-serif; overflow: hidden; }
+  
+  /* UI Layout */
+  #topbar { height: 50px; background: linear-gradient(to bottom, #2c3e50, #1a252f); display: flex; justify-content: space-between; align-items: center; padding: 0 20px; border-bottom: 2px solid #e67e22; box-shadow: 0 4px 15px rgba(0,0,0,0.8); z-index: 100; position: relative; }
+  .stat-box { display: flex; gap: 20px; align-items: center; font-size: 16px; font-weight: bold; }
+  .text-gold { color: #f1c40f; } .text-ap { color: #3498db; font-size: 18px; text-shadow: 0 0 5px #3498db; }
+  
+  #game { display: flex; height: calc(100vh - 50px); }
+  
+  /* Hex Map Viewport */
+  #map-viewport { flex: 1; overflow: auto; background: #050505; position: relative; cursor: grab; }
+  #map-viewport:active { cursor: grabbing; }
+  
+  /* Hex Grid Canvas */
+  #map-container { position: absolute; top: 50px; left: 50px; transform-origin: top left; }
+  
+  .hex {
+    position: absolute; width: var(--hex-w); height: var(--hex-h);
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+    display: flex; justify-content: center; align-items: center;
+    box-sizing: border-box; cursor: pointer; transition: filter 0.2s;
+  }
+  .hex::after { content: ''; position: absolute; top: 1px; left: 1px; right: 1px; bottom: 1px; clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%); z-index: -1; }
+  .hex:hover { filter: brightness(1.5); z-index: 5; }
+  
+  /* Terrains */
+  .plain { background: #3c5a38; } .plain::after { background: #2f4f2f; }
+  .forest { background: #1a3c20; } .forest::after { background: #112b15; }
+  .mountain { background: #555; } .mountain::after { background: #444; }
+  .river { background: #2980b9; } .river::after { background: #1f618d; }
+  .city { background: #e67e22; box-shadow: 0 0 15px #e67e22; z-index: 2; }
+  
+  /* Hex Overlays */
+  .reachable { background: #2ecc71 !important; opacity: 0.6; z-index: 3; box-shadow: inset 0 0 10px #fff; }
+  .attackable { background: #e74c3c !important; opacity: 0.6; z-index: 3; box-shadow: inset 0 0 10px #fff; }
+  .selected-hex { background: #f1c40f !important; opacity: 0.8; z-index: 4; }
+
+  /* Dynamic Units Layer */
+  #unit-layer { position: absolute; top: 0; left: 0; pointer-events: none; }
+  .unit-marker {
+    position: absolute; width: 34px; height: 34px; border-radius: 50%;
+    display: flex; justify-content: center; align-items: center; font-size: 14px; font-weight: bold;
+    color: white; z-index: 10;
+    transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1); /* 物理滑動動畫 */
+    box-shadow: 0 3px 6px rgba(0,0,0,0.6), inset 0 -3px 5px rgba(0,0,0,0.3);
+    pointer-events: auto; cursor: pointer; text-shadow: 1px 1px 2px #000;
+  }
+  .faction-player { background: radial-gradient(circle at 30% 30%, #4dd0e1, #00838f); border: 2px solid #b2ebf2; }
+  .faction-enemy { background: radial-gradient(circle at 30% 30%, #e57373, #c62828); border: 2px solid #ffcdd2; }
+  .unit-acted { filter: grayscale(80%) brightness(0.6); }
+
+  /* Damage Floating Text */
+  .dmg-text { position: absolute; color: #ff5252; font-weight: 900; font-size: 20px; z-index: 20; text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000; animation: floatUp 1s ease-out forwards; pointer-events: none; }
+  @keyframes floatUp { 0% { transform: translateY(0) scale(1); opacity: 1; } 50% { transform: translateY(-20px) scale(1.5); } 100% { transform: translateY(-40px) scale(1); opacity: 0; } }
+
+  /* Sidebar */
+  #side { width: 360px; background: #15181c; padding: 15px; overflow-y: auto; border-left: 2px solid #333; display: flex; flex-direction: column; gap: 12px; box-shadow: -5px 0 20px rgba(0,0,0,0.8); z-index: 100; }
+  button { padding: 10px; background: linear-gradient(180deg, #34495e, #2c3e50); color: #fff; border: 1px solid #7f8c8d; border-radius: 6px; cursor: pointer; font-weight: bold; letter-spacing: 1px; transition: 0.2s; }
+  button:hover:not(:disabled) { background: #e67e22; border-color: #f39c12; transform: translateY(-1px); box-shadow: 0 4px 8px rgba(230, 126, 34, 0.4); }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  
+  #panel, #log { background: #0a0c0f; padding: 12px; border: 1px inset #333; border-radius: 6px; font-size: 14px; line-height: 1.6; }
+  #log { flex: 1; overflow-y: auto; color: #bdc3c7; font-size: 13px; }
+  .log-entry { border-bottom: 1px dashed #2c3e50; padding: 5px 0; }
+  .log-tactic { color: #e74c3c; font-weight: bold; }
+  .log-collision { color: #f1c40f; font-weight: bold; }
 </style>
 </head>
 <body>
 
 <div id="topbar">
-<span id="turn" style="font-weight:bold;color:#fff">回合: 1</span>
-<span id="faction" style="color:#00bcd4;font-weight:bold">勢力: 劉備</span>
-<span id="goldFood" style="color:#ffd54f;font-weight:bold">金: 0 | 糧: 0</span>
-<span id="modeText">模式: ⚪ 待機</span>
+  <div class="stat-box">
+    <span id="turn">第 1 旬</span>
+    <span id="faction" style="color:#4dd0e1">勢力: 劉備</span>
+    <span class="text-ap" id="apDisplay">行動力: 50 / 50</span>
+  </div>
+  <div class="stat-box">
+    <span id="goldFood" class="text-gold">金: 0 | 糧: 0</span>
+    <span id="modeText">⚪ 待機 (右鍵取消)</span>
+  </div>
 </div>
 
 <div id="game">
-<div id="map-container"><div id="map" oncontextmenu="cancelSelection(event)"></div></div>
-<div id="side">
-<div id="panel">請選擇單位或城池...</div>
-<div id="log">戰報將顯示於此...</div>
+  <div id="map-viewport">
+    <div id="map-container">
+      <div id="map" oncontextmenu="cancelSelection(event)"></div>
+      <div id="unit-layer"></div>
+    </div>
+  </div>
 
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
-<button onclick="setMode('move')" style="color:#69f0ae;border-color:#69f0ae">🟢 移動</button>
-<button onclick="setMode('attack')" style="color:#ff5252;border-color:#ff5252">🔴 攻擊</button>
-</div>
+  <div id="side">
+    <div id="panel">請點擊部隊或城池...</div>
+    
+    <div id="actionMenu" style="display:none; flex-direction:column; gap:8px;">
+      <div class="grid-2">
+        <button onclick="setMode('move')" style="color:#2ecc71; border-color:#2ecc71">🐎 網格移動</button>
+        <button onclick="setMode('attack')" style="color:#e67e22; border-color:#e67e22">⚔️ 普通攻擊</button>
+      </div>
+      <button onclick="setMode('tactic')" style="color:#e74c3c; border-color:#e74c3c; font-size:15px; border-width: 2px; box-shadow: 0 0 10px rgba(231,76,60,0.3)">💥 發動戰法 (耗氣20)</button>
+      <button onclick="waitUnit()">⏸ 原地待命</button>
+    </div>
 
-<select id="formationSelect" onchange="changeFormation()">
-<option value="normal">普通陣：無加成</option>
-<option value="square">方陣：防禦↑</option>
-<option value="wedge">鋒矢：騎兵攻擊↑</option>
-<option value="arrow">雁行：弓兵攻擊↑</option>
-</select>
+    <div id="cityMenu" style="display:none; flex-direction:column; gap:8px;">
+      <button onclick="developCity()">🔨 內政開發 (AP:20, 金-300)</button>
+      <button onclick="recruit()">👥 徵兵出陣 (AP:20, 糧-500)</button>
+    </div>
 
-<hr style="border-color:#444">
-<button onclick="waitUnit()">⏸ 部隊待機</button>
-<button onclick="developCity()">🔨 城市開發 (金-300)</button>
-<button onclick="recruit()">👥 招募兵力 (糧-300)</button>
-<button onclick="loadScenario('red')" style="background:#5c0000;border-color:#ff5252">🔥 赤壁劇本</button>
-
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:5px">
-<button onclick="saveGame()">💾 存檔</button>
-<button onclick="loadGame()">📂 讀檔</button>
-</div>
-
-<button onclick="endTurn()" style="background:linear-gradient(to right,#5e35b1,#311b92);font-size:16px;margin-top:15px;padding:12px">回合結束 ⏭</button>
-</div>
+    <hr style="border-color:#333; width:100%; margin: 5px 0;">
+    <button onclick="endTurn()" style="background:linear-gradient(180deg,#8e44ad,#732d91); font-size:16px; padding:15px;">進行下一旬 ⏭</button>
+    <div id="log"></div>
+  </div>
 </div>
 
 <script>
-const SIZE=50;
-let units=[],cities=[],terrain=[],domCells=[];
-let selectedId=null,selectedCityName=null,mode=null;
-let turn=1,playerFaction="劉備",unitIdCounter=0,gameEnded=false;
-let reachableTiles=new Set(),attackableTiles=new Set();
+// --- Hex Math & Config ---
+const SIZE_W = 30, SIZE_H = 30; // 30x30 Map
+const HEX_W = 40, HEX_H = 46; // Visual dimensions (Pointy Top)
+// Offset row math: horizontal spacing = width, vertical spacing = 3/4 height.
 
-let resources={
-  "劉備":{gold:1500,food:3000},
-  "曹操":{gold:1800,food:3500},
-  "孫權":{gold:1600,food:3200}
+// Cube / Offset Conversions (odd-r: odd rows shift right)
+function hexToCube(col, row) {
+  let q = col - Math.floor(row / 2);
+  let r = row;
+  return { q, r, s: -q - r };
+}
+function cubeToHex(q, r, s) {
+  let col = q + Math.floor(r / 2);
+  let row = r;
+  return { x: col, y: row };
+}
+function hexDist(x1, y1, x2, y2) {
+  let a = hexToCube(x1, y1), b = hexToCube(x2, y2);
+  return Math.max(Math.abs(a.q-b.q), Math.abs(a.r-b.r), Math.abs(a.s-b.s));
+}
+function getNeighbors(x, y) {
+  let isOdd = y % 2 !== 0;
+  let dirs = isOdd ? [[1,0], [1,-1], [0,-1], [-1,0], [0,1], [1,1]] 
+                   : [[1,0], [0,-1], [-1,-1], [-1,0], [-1,1], [0,1]];
+  return dirs.map(d => ({ x: x+d[0], y: y+d[1] }));
+}
+// 取得被推擠的目標格子 (從 attacker 推 defender)
+function getPushDest(ax, ay, tx, ty) {
+  let a = hexToCube(ax, ay), t = hexToCube(tx, ty);
+  let vec = { q: t.q - a.q, r: t.r - a.r, s: t.s - a.s };
+  // 確保是正規方向向量
+  let max = Math.max(Math.abs(vec.q), Math.abs(vec.r), Math.abs(vec.s));
+  if(max === 0) return {x: tx, y: ty};
+  vec = { q: vec.q/max, r: vec.r/max, s: vec.s/max };
+  return cubeToHex(t.q + vec.q, t.r + vec.r, t.s + vec.s);
+}
+
+// --- Game State ---
+let units=[], cities=[], terrain=[], mapCells=[];
+let selectedId=null, selectedCityName=null, mode=null;
+let turn=1, playerFaction="劉備", unitIdCounter=0;
+let reachableTiles=new Set(), attackableTiles=new Set();
+
+let factions = {
+  "劉備": { gold: 2000, food: 5000, ap: 60, maxAp: 60 },
+  "曹操": { gold: 3000, food: 8000, ap: 80, maxAp: 80 },
+  "孫權": { gold: 2500, food: 6000, ap: 70, maxAp: 70 }
 };
 
-function init(){
+function init() {
   createMap();
-  genTerrain();
-
-  createCity(10,30,"成都","劉備");
-  createCity(20,20,"洛陽","曹操");
-  createCity(35,35,"建業","孫權");
+  createCity(8, 25, "成都", "劉備"); createCity(18, 12, "許昌", "曹操"); createCity(26, 22, "建業", "孫權");
   normalizeCityTerrain();
 
   units.push(
-    gen("劉備","劉備",10,30,"infantry"),
-    gen("關羽","劉備",11,30,"cavalry"),
-    gen("張飛","劉備",10,31,"cavalry"),
-    gen("曹操","曹操",20,20,"infantry"),
-    gen("孫權","孫權",35,35,"archer")
+    gen("劉備","劉備",8,24,"spear","遁走"), gen("張飛","劉備",8,26,"spear","鬥神"), gen("關羽","劉備",9,25,"pike","神將"),
+    gen("曹操","曹操",18,13,"cavalry","虛實"), gen("夏侯惇","曹操",17,12,"cavalry","騎將"), gen("郭嘉","曹操",19,12,"bow","鬼謀"),
+    gen("孫權","孫權",25,22,"bow","任才"), gen("周瑜","孫權",26,23,"bow","火神"), gen("甘寧","孫權",26,21,"pike","威風")
   );
 
-  for(let i=0;i<20;i++){
-    let f=["劉備","曹操","孫權"][Math.random()*3|0];
-    let pos=findSpawn();
-    units.push(gen("武將"+i,f,pos.x,pos.y,["infantry","cavalry","archer"][Math.random()*3|0]));
-  }
-
-  addLog("遊戲開始，天下大勢由你決定！");
-  render();
+  addLog("天下大勢，分久必合。六角格物理引擎版啟動！");
+  renderMap(); renderUnits();
+  
+  // Drag to scroll
+  const vp = document.getElementById('map-viewport');
+  let isDown = false, startX, startY, scrollLeft, scrollTop;
+  vp.addEventListener('mousedown', (e) => { isDown=true; startX=e.pageX-vp.offsetLeft; startY=e.pageY-vp.offsetTop; scrollLeft=vp.scrollLeft; scrollTop=vp.scrollTop; });
+  vp.addEventListener('mouseleave', () => { isDown=false; });
+  vp.addEventListener('mouseup', () => { isDown=false; });
+  vp.addEventListener('mousemove', (e) => { if(!isDown)return; e.preventDefault(); const x=e.pageX-vp.offsetLeft, y=e.pageY-vp.offsetTop; vp.scrollLeft=scrollLeft-(x-startX); vp.scrollTop=scrollTop-(y-startY); });
 }
 
-function gen(name,faction,x,y,type){
-  return{
-    id:unitIdCounter++,name,faction,x,y,type,
-    hp:2000,maxHp:2000,
-    war:70+Math.random()*25,
-    int:70+Math.random()*25,
-    lead:70+Math.random()*25,
-    speed:type==="cavalry"?6:type==="archer"?4:5,
-    range:type==="archer"?4:1,
-    skill:["火計","連擊","鬼謀"][Math.random()*3|0],
-    formation:"normal",
-    hasMoved:false,
-    acted:false
+function gen(name,faction,x,y,type,skill){
+  return {
+    id: `U${unitIdCounter++}`, name, faction, x, y, type,
+    troops: 3000, maxTroops: 3000, will: 100, maxWill: 120,
+    war: 70+Math.random()*25, int: 70+Math.random()*25, lead: 70+Math.random()*25,
+    speed: type==="cavalry"? 5 : 4, range: type==="bow"? 3 : 1,
+    skill: skill, acted: false, dom: null
   };
 }
 
-function createMap(){
-  let map=document.getElementById("map");
-  map.innerHTML="";
-  domCells=[];
-  for(let i=0;i<SIZE*SIZE;i++){
-    let d=document.createElement("div");
-    d.className="cell plain";
-    d.onclick=()=>click(i%SIZE,(i/SIZE)|0);
-    map.appendChild(d);
-    domCells.push(d);
+function createMap() {
+  const map = document.getElementById("map");
+  const container = document.getElementById("map-container");
+  container.style.width = `${SIZE_W * HEX_W + HEX_W/2}px`;
+  container.style.height = `${SIZE_H * HEX_H * 0.75 + HEX_H*0.25}px`;
+
+  for (let r = 0; r < SIZE_H; r++) {
+    for (let c = 0; c < SIZE_W; c++) {
+      let rand = Math.random(), t = "plain";
+      if(rand > 0.88) t="mountain"; else if(rand > 0.74) t="forest"; else if(rand > 0.65) t="river";
+      terrain.push(t);
+
+      let div = document.createElement("div");
+      div.className = `hex ${t}`;
+      
+      // Calculate Hex Screen Position
+      let px = c * HEX_W + (r % 2 === 1 ? HEX_W / 2 : 0);
+      let py = r * HEX_H * 0.75;
+      div.style.left = `${px}px`; div.style.top = `${py}px`;
+      
+      div.onclick = (e) => { if(!isDragging()) clickGrid(c, r); };
+      div.oncontextmenu = cancelSelection;
+      map.appendChild(div);
+      mapCells.push(div);
+    }
   }
 }
 
-function genTerrain(){
-  terrain=[];
-  for(let i=0;i<SIZE*SIZE;i++){
-    let r=Math.random(),t="plain";
-    if(r>0.88)t="mountain";
-    else if(r>0.74)t="forest";
-    else if(r>0.66)t="river";
-    terrain.push(t);
-  }
-}
+let lastClickTime = 0;
+function isDragging() { let now = Date.now(); if(now - lastClickTime < 150) return false; lastClickTime = now; return true; }
 
 function normalizeCityTerrain(){
   cities.forEach(c=>{
-    for(let dy=-1;dy<=1;dy++){
-      for(let dx=-1;dx<=1;dx++){
-        let x=c.x+dx,y=c.y+dy;
-        if(x>=0&&x<SIZE&&y>=0&&y<SIZE)terrain[y*SIZE+x]="plain";
-      }
-    }
+    getNeighbors(c.x, c.y).concat([{x:c.x, y:c.y}]).forEach(pos => {
+      if(pos.x>=0 && pos.x<SIZE_W && pos.y>=0 && pos.y<SIZE_H) terrain[pos.y*SIZE_W + pos.x] = "plain";
+    });
   });
 }
 
-function findSpawn(){
-  for(let i=0;i<1500;i++){
-    let x=Math.random()*SIZE|0,y=Math.random()*SIZE|0;
-    if(canMoveTo(x,y)&&!cities.some(c=>c.x===x&&c.y===y))return{x,y};
-  }
-  return{x:1,y:1};
-}
+function getTerrain(x,y){ return (x<0||y<0||x>=SIZE_W||y>=SIZE_H) ? "mountain" : terrain[y*SIZE_W+x]; }
 
-function getTerrain(x,y){
-  return(x<0||y<0||x>=SIZE||y>=SIZE)?"mountain":terrain[y*SIZE+x];
-}
-
-function terrainCost(unit,x,y){
-  let t=getTerrain(x,y);
-  if(t==="mountain"||t==="river")return Infinity;
-  if(t==="forest")return unit.type==="cavalry"?3:2;
-  return 1;
-}
-
-function canMoveTo(x,y){
-  let t=getTerrain(x,y);
-  if(t==="mountain"||t==="river")return false;
-  if(units.some(u=>u.x===x&&u.y===y&&u.hp>0))return false;
+function canMoveTo(x, y, isCavalry=false){
+  let t = getTerrain(x,y);
+  if(t==="mountain" || t==="river") return false;
+  if(isCavalry && t==="forest") return false; // 騎兵不能進森林
+  if(units.some(u=> u.x===x && u.y===y)) return false;
   return true;
 }
 
-function calculateReachable(unit){
-  reachableTiles.clear();
-  attackableTiles.clear();
-  if(!unit||unit.hasMoved||unit.acted)return;
+// ZOC (Zone of Control) 判定
+function isZOC(faction, x, y){
+  return getNeighbors(x,y).some(pos => units.some(u => u.x===pos.x && u.y===pos.y && u.faction!==faction));
+}
 
-  let queue=[{x:unit.x,y:unit.y,cost:0}];
-  let best=new Map();
-  best.set(`${unit.x},${unit.y}`,0);
+// BFS Hex Movement Algorithm
+function calculateReachable(unit){
+  reachableTiles.clear(); attackableTiles.clear();
+  if(!unit || unit.acted) return;
+
+  let queue=[{x: unit.x, y: unit.y, cost: 0}];
+  let visited=new Map(); visited.set(`${unit.x},${unit.y}`, 0);
   reachableTiles.add(`${unit.x},${unit.y}`);
+
+  let ignoreZOC = unit.skill==="飛將" || unit.skill==="遁走";
+  let isCav = unit.type==="cavalry";
 
   while(queue.length){
     queue.sort((a,b)=>a.cost-b.cost);
-    let cur=queue.shift();
+    let cur = queue.shift();
+    if(!ignoreZOC && isZOC(unit.faction, cur.x, cur.y) && cur.cost > 0) continue; // ZOC Halt
 
-    [[0,1],[1,0],[0,-1],[-1,0]].forEach(d=>{
-      let nx=cur.x+d[0],ny=cur.y+d[1],key=`${nx},${ny}`;
-      if(nx<0||nx>=SIZE||ny<0||ny>=SIZE)return;
-      if(!canMoveTo(nx,ny))return;
-
-      let nextCost=cur.cost+terrainCost(unit,nx,ny);
-      if(nextCost>unit.speed)return;
-      if(!best.has(key)||nextCost<best.get(key)){
-        best.set(key,nextCost);
-        reachableTiles.add(key);
-        queue.push({x:nx,y:ny,cost:nextCost});
+    getNeighbors(cur.x, cur.y).forEach(n => {
+      let tCost = getTerrain(n.x, n.y)==="forest" ? 2 : 1;
+      let nCost = cur.cost + tCost;
+      if(nCost <= unit.speed && canMoveTo(n.x, n.y, isCav)) {
+        let key = `${n.x},${n.y}`;
+        if(!visited.has(key) || visited.get(key) > nCost){
+          visited.set(key, nCost); reachableTiles.add(key);
+          queue.push({x: n.x, y: n.y, cost: nCost});
+        }
       }
     });
   }
 }
 
-function calculateAttackable(unit){
-  reachableTiles.clear();
-  attackableTiles.clear();
-  if(!unit||unit.acted)return;
+function calculateAttackable(unit, isTactic=false){
+  reachableTiles.clear(); attackableTiles.clear();
+  if(!unit || unit.acted) return;
+  let minR = 1, maxR = unit.range;
+  if(isTactic) { if(unit.type==="bow"){ minR=2; maxR=3; } else { maxR=1; } }
 
-  for(let y=Math.max(0,unit.y-unit.range);y<=Math.min(SIZE-1,unit.y+unit.range);y++){
-    for(let x=Math.max(0,unit.x-unit.range);x<=Math.min(SIZE-1,unit.x+unit.range);x++){
-      if(Math.abs(unit.x-x)+Math.abs(unit.y-y)<=unit.range){
-        attackableTiles.add(`${x},${y}`);
-      }
+  for(let y=0; y<SIZE_H; y++){
+    for(let x=0; x<SIZE_W; x++){
+      let d = hexDist(unit.x, unit.y, x, y);
+      if(d >= minR && d <= maxR) attackableTiles.add(`${x},${y}`);
     }
   }
 }
 
-function createCity(x,y,name,owner){
-  cities.push({x,y,name,owner,hp:3000,maxHp:3000,gold:500,food:800,dev:50,troops:1000,order:80});
-}
+function createCity(x,y,name,owner){ cities.push({x,y,name,owner,hp:5000,maxHp:5000,troops:5000,dev:100}); }
+function addLog(msg){ const lg=document.getElementById("log"); lg.innerHTML=`<div class="log-entry">${msg}</div>`+lg.innerHTML; }
+function consumeAP(amt){ if(factions[playerFaction].ap >= amt){ factions[playerFaction].ap-=amt; return true; } addLog(`<span style="color:#e74c3c">行動力不足！需要 ${amt} 點。</span>`); return false; }
 
-function addLog(msg){
-  const logDiv=document.getElementById("log");
-  logDiv.innerHTML=`<div class="log-entry">> ${msg}</div>`+logDiv.innerHTML;
-}
-
-function cancelSelection(e){
-  if(e)e.preventDefault();
-  selectedId=null;
-  selectedCityName=null;
-  mode=null;
-  reachableTiles.clear();
-  attackableTiles.clear();
-  document.getElementById("panel").innerHTML="請選擇單位或城池...";
-  render();
-}
-
-function click(x,y){
-  if(gameEnded)return addLog("遊戲已結束，請重新整理或載入劇本。");
-
-  let clickedUnit=units.find(v=>v.x===x&&v.y===y&&v.hp>0);
-  let clickedCity=cities.find(c=>c.x===x&&c.y===y);
-
-  if(clickedUnit&&(!mode||clickedUnit.faction===playerFaction)){
-    selectedId=clickedUnit.id;
-    selectedCityName=null;
-    setMode(null);
-    showUnit();
-    render();
-    return;
-  }
-
-  if(clickedCity&&!mode){
-    selectedCityName=clickedCity.name;
-    selectedId=null;
-    reachableTiles.clear();
-    attackableTiles.clear();
-    showCity(clickedCity);
-    render();
-    return;
-  }
-
-  let activeUnit=units.find(u=>u.id===selectedId);
-  if(!activeUnit){cancelSelection();return;}
-
-  if(activeUnit.acted)return addLog(`${activeUnit.name} 本回合行動已結束。`);
-
-  if(mode==="move"){
-    if(activeUnit.faction!==playerFaction)return addLog("不能移動敵方部隊。");
-    if(activeUnit.hasMoved)return addLog(`${activeUnit.name} 已經移動過了。`);
-    if(!reachableTiles.has(`${x},${y}`)){cancelSelection();return;}
-
-    activeUnit.x=x;
-    activeUnit.y=y;
-    activeUnit.hasMoved=true;
-    reachableTiles.clear();
-    addLog(`🐎 ${activeUnit.name} 移動至 (${x},${y})。`);
-    setMode(null);
-  }
-
-  else if(mode==="attack"){
-    if(activeUnit.faction!==playerFaction)return addLog("不能操作敵軍。");
-    if(!attackableTiles.has(`${x},${y}`)){cancelSelection();return;}
-
-    if(clickedUnit&&clickedUnit.faction!==activeUnit.faction){
-      battle(activeUnit,clickedUnit,x,y);
-      activeUnit.acted=true;
-      activeUnit.hasMoved=true;
-    }else if(clickedCity&&clickedCity.owner!==activeUnit.faction){
-      let dist=Math.abs(activeUnit.x-x)+Math.abs(activeUnit.y-y);
-      if(dist>activeUnit.range)return addLog("攻城失敗：距離不足。");
-      siege(activeUnit,clickedCity);
-      activeUnit.acted=true;
-      activeUnit.hasMoved=true;
-    }else{
-      addLog("該位置沒有可攻擊的敵方目標。");
-    }
-    setMode(null);
-  }
-
-  removeDead();
-  checkGameOver();
-  render();
-  showUnit();
-}
-
-function battle(a,t,x,y){
-  let terrainType=getTerrain(x,y);
-  let dmg=a.war;
-
-  if(a.type==="cavalry"){
-    if(terrainType==="river")return addLog(`🌊 河流地形，${a.name} 騎兵衝鋒失敗。`);
-    dmg*=1.4;
-    if(terrainType==="forest")dmg*=0.9;
-    if(terrainType==="mountain")dmg*=0.7;
-    if(a.formation==="wedge")dmg*=1.3;
-  }
-
-  if(a.type==="archer"){
-    dmg*=1.1;
-    if(terrainType==="forest")dmg*=1.2;
-    if(terrainType==="mountain")dmg*=1.1;
-    if(a.formation==="arrow")dmg*=1.3;
-  }
-
-  if(a.formation==="square")dmg*=0.85;
-
-  if(a.skill==="火計"){
-    let rate=terrainType==="forest"?2.0:terrainType==="river"?0:terrainType==="mountain"?0.8:1.0;
-    if(rate===0)return addLog("🌊 水域火計無效。");
-    dmg=500*rate;
-    fire(x,y);
-    addLog(`🔥 ${a.name} 發動火計，倍率 ${rate}。`);
-  }else if(a.skill==="連擊"){
-    dmg+=600;
-  }else if(a.skill==="鬼謀"){
-    dmg+=300;
-    a.hp=Math.min(a.maxHp,a.hp+200);
-  }
-
-  if(t.formation==="square")dmg*=0.7;
-
-  t.hp=Math.max(0,t.hp-Math.floor(dmg));
-  addLog(`⚔️ ${a.name} 攻擊 ${t.name}，造成 ${Math.floor(dmg)} 傷害。`);
-  if(t.hp<=0)addLog(`💀 ${t.name} 部隊潰散！`);
-}
-
-function siege(a,c){
-  let dmg=Math.floor(a.war*8+a.lead*5);
-  if(a.type==="cavalry")dmg*=0.8;
-  if(a.type==="archer")dmg*=0.7;
-
-  c.hp=Math.max(0,c.hp-Math.floor(dmg));
-  addLog(`🏯 ${a.name} 攻打 ${c.name}，城耐久 -${Math.floor(dmg)}。`);
-
-  if(c.hp<=0){
-    c.owner=a.faction;
-    c.hp=c.maxHp;
-    if(!resources[c.owner])resources[c.owner]={gold:1000,food:2000};
-    addLog(`🚩 ${c.name} 被 ${a.faction} 佔領！`);
-  }
-}
-
-function fire(x,y){
-  let el=domCells[y*SIZE+x];
-  if(el){
-    el.classList.add("skill");
-    setTimeout(()=>el.classList.remove("skill"),500);
-  }
-}
-
-function removeDead(){
-  units=units.filter(u=>u.hp>0);
-  if(selectedId&&!units.find(u=>u.id===selectedId)){
-    cancelSelection();
-  }
+function cancelSelection(e) {
+  if(e) e.preventDefault();
+  selectedId=null; selectedCityName=null; setMode(null);
+  document.getElementById("actionMenu").style.display="none";
+  document.getElementById("cityMenu").style.display="none";
+  document.getElementById("panel").innerHTML="請點擊部隊或城池...";
+  renderMap(); renderUnits();
 }
 
 function setMode(m){
-  mode=m;
-  let activeUnit=units.find(u=>u.id===selectedId);
+  mode=m; let u=units.find(u=>u.id===selectedId);
+  document.getElementById("modeText").innerText = m==="move"?"🟢 移動":m==="attack"?"⚔️ 攻擊":m==="tactic"?"💥 戰法":"⚪ 待機 (右鍵取消)";
+  if(m==="move" && u) calculateReachable(u);
+  else if(m==="attack" && u) calculateAttackable(u, false);
+  else if(m==="tactic" && u) calculateAttackable(u, true);
+  else { reachableTiles.clear(); attackableTiles.clear(); }
+  renderMap();
+}
 
-  document.getElementById("modeText").innerText=
-    `模式: ${m==="move"?"🟢 移動模式":m==="attack"?"🔴 攻擊模式":"⚪ 待機"}`;
+// 主交互邏輯
+function clickGrid(x, y){
+  if(gameEnded) return;
+  let activeU = units.find(u=>u.id===selectedId);
+  let clickedU = units.find(u=>u.x===x && u.y===y);
+  let clickedC = cities.find(c=>c.x===x && c.y===y);
 
-  if(m==="move"&&activeUnit)calculateReachable(activeUnit);
-  else if(m==="attack"&&activeUnit)calculateAttackable(activeUnit);
-  else{
-    reachableTiles.clear();
-    attackableTiles.clear();
+  if(activeU && mode){
+    if(activeU.faction !== playerFaction) return addLog("不能操作敵軍。");
+    
+    // 執行移動
+    if(mode==="move"){
+      if(!reachableTiles.has(`${x},${y}`)) return cancelSelection();
+      activeU.x = x; activeU.y = y; 
+      addLog(`🐎 [${activeU.name}] 移動。`);
+      setMode('attack'); // 移動後自動跳轉攻擊預覽
+      renderUnits(); return; // CSS 負責滑動
+    }
+    // 執行攻擊/戰法
+    if(mode==="attack" || mode==="tactic"){
+      if(!attackableTiles.has(`${x},${y}`)) return cancelSelection();
+      let isTactic = (mode==="tactic");
+      if(isTactic){
+        if(activeU.will < 20) return addLog("氣力不足 20，無法發動！");
+        if(!consumeAP(10)) return; activeU.will-=20;
+      } else {
+        if(!consumeAP(10)) return;
+      }
+
+      if(clickedU && clickedU.faction!==activeU.faction) resolveCombat(activeU, clickedU, isTactic);
+      else if(clickedC && clickedC.owner!==activeU.faction) resolveSiege(activeU, clickedC, isTactic);
+      else return addLog("此處無目標。");
+      
+      activeU.acted = true;
+      cancelSelection();
+      return;
+    }
   }
 
-  render();
-}
-
-function waitUnit(){
-  let u=units.find(u=>u.id===selectedId);
-  if(!u)return addLog("請先選擇部隊。");
-  if(u.faction!==playerFaction)return addLog("不能操作敵軍。");
-
-  u.acted=true;
-  u.hasMoved=true;
-  reachableTiles.clear();
-  attackableTiles.clear();
-  addLog(`${u.name} 待機。`);
-  setMode(null);
-  render();
-  showUnit();
-}
-
-function changeFormation(){
-  let u=units.find(u=>u.id===selectedId);
-  if(u){
-    u.formation=document.getElementById("formationSelect").value;
-    addLog(`${u.name} 切換為 ${formationName(u.formation)}。`);
-    showUnit();
-  }
-}
-
-function showUnit(){
-  let u=units.find(u=>u.id===selectedId);
-  const p=document.getElementById("panel");
-  if(!u){
-    p.innerHTML="請選擇單位或城池...";
+  // 選取邏輯
+  if(clickedU){
+    if(clickedU.faction===playerFaction){
+      selectedId=clickedU.id; selectedCityName=null;
+      document.getElementById("cityMenu").style.display="none";
+      document.getElementById("actionMenu").style.display="flex";
+      setMode(null); showUnit(); renderMap(); renderUnits();
+    } else { cancelSelection(); selectedId=clickedU.id; showUnit(); renderUnits(); }
     return;
   }
-
-  document.getElementById("formationSelect").value=u.formation||"normal";
-
-  let statusTxt=u.acted
-    ?"<span style='color:#ff5252'>已結束</span>"
-    :u.hasMoved
-    ?"<span style='color:#ffd54f'>已移動，可攻擊</span>"
-    :"<span style='color:#69f0ae'>可移動/攻擊</span>";
-
-  p.innerHTML=`
-  <div style="font-size:16px;color:#ffd54f;margin-bottom:5px"><b>${u.name}</b>（${u.faction}）</div>
-  兵力:${Math.floor(u.hp)} / ${u.maxHp}｜狀態:${statusTxt}<br>
-  兵種:${unitTypeName(u.type)}｜射程:${u.range}｜移速:${u.speed}<br>
-  武:${Math.floor(u.war)}｜智:${Math.floor(u.int)}｜統:${Math.floor(u.lead)}<br>
-  技能:${u.skill}｜陣型:${formationName(u.formation)}<br>
-  地形:${terrainName(getTerrain(u.x,u.y))}
-  `;
-}
-
-function showCity(c){
-  document.getElementById("panel").innerHTML=`
-  <div style="font-size:16px;color:#ffd54f;margin-bottom:5px"><b>${c.name}</b>（${c.owner}）</div>
-  耐久:${Math.floor(c.hp)} / ${c.maxHp}<br>
-  開發:${c.dev}｜治安:${c.order}<br>
-  金錢:${c.gold}｜糧草:${c.food}｜兵力:${c.troops}
-  `;
-}
-
-function unitTypeName(t){return{infantry:"步兵",cavalry:"騎兵",archer:"弓兵"}[t]||t}
-function formationName(f){return{normal:"普通陣",square:"方陣",wedge:"鋒矢",arrow:"雁行"}[f]||f}
-function terrainName(t){return{plain:"平原",forest:"森林",mountain:"山地",river:"河流"}[t]||t}
-
-function developCity(){
-  let c=cities.find(c=>c.name===selectedCityName)||cities.find(c=>c.owner===playerFaction);
-  if(!c||c.owner!==playerFaction)return addLog("請選擇我方城池進行開發。");
-
-  let r=resources[playerFaction];
-  if(r.gold<300)return addLog("勢力資金不足，無法開發。");
-
-  r.gold-=300;
-  c.dev+=10;
-  c.gold+=200;
-  c.food+=300;
-  c.order=Math.min(100,c.order+3);
-
-  addLog(`🔨 ${c.name} 開發完成：勢力金-300，城池開發+10。`);
-  showCity(c);
-  render();
-}
-
-function recruit(){
-  let c=cities.find(c=>c.name===selectedCityName)||cities.find(c=>c.owner===playerFaction);
-  if(!c||c.owner!==playerFaction)return addLog("請選擇我方城池進行招募。");
-
-  let r=resources[playerFaction];
-  if(r.food<300)return addLog("勢力糧草不足，無法徵兵。");
-
-  r.food-=300;
-  c.troops+=500;
-
-  let unit=units.find(u=>u.faction===playerFaction&&u.x===c.x&&u.y===c.y);
-
-  if(unit){
-    unit.hp+=500;
-    unit.maxHp+=500;
-    addLog(`👥 ${c.name} 徵兵完成，${unit.name} 兵力+500。`);
-  }else if(!units.some(u=>u.x===c.x&&u.y===c.y)){
-    units.push(gen("新軍"+Math.floor(Math.random()*99),playerFaction,c.x,c.y,"infantry"));
-    addLog(`👥 ${c.name} 招募新部隊完成。`);
-  }else{
-    let pos=findAdjacentFree(c.x,c.y);
-    if(pos){
-      units.push(gen("新軍"+Math.floor(Math.random()*99),playerFaction,pos.x,pos.y,"infantry"));
-      addLog(`👥 ${c.name} 城內擁擠，新軍部署於鄰接格。`);
-    }else{
-      addLog("城池周邊無空格，無法新建部隊。");
-    }
+  if(clickedC){
+    selectedCityName=clickedC.name; selectedId=null;
+    document.getElementById("actionMenu").style.display="none";
+    if(clickedC.owner===playerFaction) document.getElementById("cityMenu").style.display="flex";
+    else document.getElementById("cityMenu").style.display="none";
+    setMode(null); showCity(clickedC); renderMap(); renderUnits(); return;
   }
-
-  showCity(c);
-  render();
-}
-
-function findAdjacentFree(x,y){
-  let dirs=[[0,1],[1,0],[0,-1],[-1,0],[1,1],[-1,1],[1,-1],[-1,-1]];
-  for(let d of dirs){
-    let nx=x+d[0],ny=y+d[1];
-    if(canMoveTo(nx,ny))return{x:nx,y:ny};
-  }
-  return null;
-}
-
-function endTurn(){
-  if(gameEnded)return addLog("遊戲已結束。");
-
-  turn++;
-  addLog(`--- 第 ${turn} 回合開始 ---`);
-
-  units.forEach(u=>{
-    u.acted=false;
-    u.hasMoved=false;
-  });
-
-  cities.forEach(c=>{
-    let r=resources[c.owner];
-    if(r){
-      r.gold+=Math.floor(c.gold+c.dev*2);
-      r.food+=Math.floor(c.food+c.dev*3);
-    }
-  });
-
-  units.filter(u=>u.faction!==playerFaction).forEach(u=>aiAct(u));
-
-  removeDead();
-  checkGameOver();
   cancelSelection();
 }
 
-function aiAct(u){
-  if(u.acted)return;
+// 產生浮動傷害數字
+function showDamageText(x, y, text) {
+  let px = x * HEX_W + (y % 2 === 1 ? HEX_W / 2 : 0) + 10;
+  let py = y * HEX_H * 0.75;
+  let dt = document.createElement("div");
+  dt.className = "dmg-text"; dt.innerText = text;
+  dt.style.left = `${px}px`; dt.style.top = `${py}px`;
+  document.getElementById("unit-layer").appendChild(dt);
+  setTimeout(()=> dt.remove(), 1000);
+}
 
-  let enemyUnits=units.filter(v=>v.faction!==u.faction);
-  let enemyCities=cities.filter(c=>c.owner!==u.faction);
-  let targets=[...enemyUnits,...enemyCities];
-  if(!targets.length)return;
+// --- 戰鬥與物理位移核心 ---
+function resolveCombat(a, t, isTactic) {
+  let dmg = Math.floor(a.lead * 8 + a.war * 12);
+  let msg = "";
 
-  targets.sort((a,b)=>
-    (Math.abs(u.x-a.x)+Math.abs(u.y-a.y))-
-    (Math.abs(u.x-b.x)+Math.abs(u.y-b.y))
-  );
+  if(!isTactic) {
+    msg = `⚔️ [${a.name}] 普攻。`;
+    if(a.skill==="連擊") dmg = Math.floor(dmg * 1.4);
+    applyDamage(t, dmg);
+    addLog(`${msg} 造成 <span style="color:#ff5252">${dmg}</span> 傷害。`);
+    return;
+  }
 
-  let t=targets[0];
-  let neededRange=t.owner&&u.type!=="archer"?1:u.range;
+  // 戰法處理 (物理推擠與碰撞)
+  dmg = Math.floor(dmg * 1.5);
+  if(["神將","鬥神","騎將"].includes(a.skill)) dmg = Math.floor(dmg * 1.2);
 
-  let queue=[{x:u.x,y:u.y,cost:0}];
-  let visited=new Set([`${u.x},${u.y}`]);
-  let best={x:u.x,y:u.y,dist:Math.abs(u.x-t.x)+Math.abs(u.y-t.y)};
-
-  while(queue.length){
-    queue.sort((a,b)=>a.cost-b.cost);
-    let cur=queue.shift();
-    let curDist=Math.abs(cur.x-t.x)+Math.abs(cur.y-t.y);
-
-    if(curDist<best.dist){
-      best={x:cur.x,y:cur.y,dist:curDist};
-    }
-
-    if(curDist<=neededRange||cur.cost>=u.speed)continue;
-
-    [[0,1],[1,0],[0,-1],[-1,0]].forEach(d=>{
-      let nx=cur.x+d[0],ny=cur.y+d[1],key=`${nx},${ny}`;
-      if(nx<0||nx>=SIZE||ny<0||ny>=SIZE||visited.has(key))return;
-      if(!canMoveTo(nx,ny))return;
-
-      let nextCost=cur.cost+terrainCost(u,nx,ny);
-      if(nextCost<=u.speed){
-        visited.add(key);
-        queue.push({x:nx,y:ny,cost:nextCost});
-      }
+  if(a.type==="spear"){
+    // 螺旋突刺：推退一格
+    addLog(`<span class="log-tactic">💥 [${a.name}] 發動【螺旋突刺】！</span>`);
+    applyDamage(t, dmg); showDamageText(t.x, t.y, `-${dmg}`);
+    if(Math.random()<0.3 || a.skill==="鬥神") { t.will=Math.max(0, t.will-20); addLog("敵軍混亂，氣力大減！"); }
+    physicsPush(a, t, "spear");
+  } 
+  else if(a.type==="cavalry"){
+    // 突擊衝鋒：推退一格，且攻擊者跟進
+    addLog(`<span class="log-tactic">🐎 [${a.name}] 發動【突擊衝鋒】！</span>`);
+    if(getTerrain(t.x,t.y)==="forest") dmg = Math.floor(dmg * 0.6);
+    applyDamage(t, dmg); showDamageText(t.x, t.y, `-${dmg}`);
+    physicsPush(a, t, "cavalry");
+  }
+  else if(a.type==="pike"){
+    // 熊手橫掃：AOE
+    addLog(`<span class="log-tactic">🌪️ [${a.name}] 發動【熊手橫掃】！</span>`);
+    getNeighbors(a.x, a.y).forEach(pos => {
+      let enemy = units.find(u=> u.x===pos.x && u.y===pos.y && u.faction!==a.faction);
+      if(enemy) { applyDamage(enemy, dmg); showDamageText(enemy.x, enemy.y, `-${dmg}`); addLog(`波及 [${enemy.name}] 造成 ${dmg} 傷害。`); }
     });
   }
-
-  if(best.x!==u.x||best.y!==u.y){
-    u.x=best.x;
-    u.y=best.y;
-  }
-
-  let finalDist=Math.abs(u.x-t.x)+Math.abs(u.y-t.y);
-
-  if(t.owner){
-    if(finalDist<=neededRange)siege(u,t);
-  }else{
-    if(finalDist<=neededRange)battle(u,t,t.x,t.y);
-  }
-
-  u.acted=true;
-  u.hasMoved=true;
-}
-
-function loadScenario(type){
-  if(type!=="red")return;
-
-  units=[];
-  cities=[];
-  terrain=[];
-  reachableTiles.clear();
-  attackableTiles.clear();
-  selectedId=null;
-  selectedCityName=null;
-  mode=null;
-  turn=1;
-  gameEnded=false;
-  playerFaction="孫權";
-  unitIdCounter=0;
-  resources={
-    "劉備":{gold:1200,food:2500},
-    "曹操":{gold:2500,food:5000},
-    "孫權":{gold:1800,food:3500}
-  };
-
-  genTerrain();
-
-  createCity(35,35,"建業","孫權");
-  createCity(20,20,"襄陽","曹操");
-  createCity(12,30,"江夏","劉備");
-  normalizeCityTerrain();
-
-  units.push(
-    gen("周瑜","孫權",35,35,"archer"),
-    gen("孫權","孫權",36,35,"infantry"),
-    gen("諸葛亮","劉備",12,30,"infantry"),
-    gen("曹操","曹操",20,20,"cavalry")
-  );
-
-  addLog("🔥 赤壁之戰開始：玩家勢力切換為孫權。");
-  render();
-  showUnit();
-}
-
-function saveGame(){
-  localStorage.setItem("s11_v8",JSON.stringify({
-    units,cities,terrain,selectedId,selectedCityName,mode,turn,playerFaction,unitIdCounter,resources,gameEnded
-  }));
-  addLog("💾 存檔成功。");
-}
-
-function loadGame(){
-  let raw=localStorage.getItem("s11_v8");
-  if(!raw)return addLog("沒有存檔。");
-
-  let d=JSON.parse(raw);
-  units=d.units||[];
-  cities=d.cities||[];
-  terrain=d.terrain||[];
-  selectedId=d.selectedId??null;
-  selectedCityName=d.selectedCityName??null;
-  mode=d.mode??null;
-  turn=d.turn||1;
-  playerFaction=d.playerFaction||"劉備";
-  unitIdCounter=d.unitIdCounter||units.length;
-  resources=d.resources||resources;
-  gameEnded=d.gameEnded||false;
-
-  if(terrain.length!==SIZE*SIZE)genTerrain();
-
-  reachableTiles.clear();
-  attackableTiles.clear();
-
-  addLog("📂 讀檔成功。");
-  render();
-  showUnit();
-}
-
-function checkGameOver(){
-  let aliveFactions=[...new Set(cities.map(c=>c.owner))];
-
-  if(aliveFactions.length===1&&!gameEnded){
-    gameEnded=true;
-    addLog(`🏆 天下已定！${aliveFactions[0]} 勢力統一神州！`);
-  }
-
-  if(!cities.some(c=>c.owner===playerFaction)&&!units.some(u=>u.faction===playerFaction)&&!gameEnded){
-    gameEnded=true;
-    addLog("💀 你的勢力已徹底覆滅。");
+  else if(a.type==="bow"){
+    // 火箭齊發
+    addLog(`<span class="log-tactic">🔥 [${a.name}] 發動【火箭齊發】！</span>`);
+    if(a.skill==="火神") dmg = Math.floor(dmg * 1.5);
+    applyDamage(t, dmg); showDamageText(t.x, t.y, `-${dmg}`);
   }
 }
 
-function render(){
-  domCells.forEach((c,i)=>{
-    let x=i%SIZE,y=(i/SIZE)|0;
-    c.className="cell "+getTerrain(x,y);
-    if(reachableTiles.has(`${x},${y}`))c.classList.add("reachable");
-    if(attackableTiles.has(`${x},${y}`))c.classList.add("attackable");
-    c.textContent="";
-  });
+// 物理推擠引擎
+function physicsPush(attacker, target, type) {
+  let dest = getPushDest(attacker.x, attacker.y, target.x, target.y);
+  let terrainAtDest = getTerrain(dest.x, dest.y);
+  let occupant = units.find(u=> u.x===dest.x && u.y===dest.y);
+  let cityOccupant = cities.find(c=> c.x===dest.x && c.y===dest.y);
 
-  cities.forEach(c=>{
-    let i=c.y*SIZE+c.x;
-    if(domCells[i]){
-      domCells[i].classList.add("city");
-      domCells[i].textContent="🏯";
+  // 延遲視覺更新，配合動畫
+  setTimeout(() => {
+    // 1. 撞擊地形邊界
+    if(terrainAtDest==="mountain" || terrainAtDest==="river" || dest.x<0 || dest.x>=SIZE_W || dest.y<0 || dest.y>=SIZE_H){
+      let cDmg = Math.floor(attacker.war * 5);
+      applyDamage(target, cDmg); showDamageText(target.x, target.y, `撞擊-${cDmg}`);
+      addLog(`<span class="log-collision">⛰️ [${target.name}] 被推去撞擊地形，追加 ${cDmg} 傷害！</span>`);
     }
-  });
-
-  units.forEach(u=>{
-    let idx=u.y*SIZE+u.x;
-    if(domCells[idx]){
-      domCells[idx].textContent="⚔️";
-      domCells[idx].classList.add(u.faction===playerFaction?"unit":"enemy");
-      if(u.id===selectedId)domCells[idx].classList.add("selected");
-      if(u.acted)domCells[idx].classList.add("acted");
+    // 2. 撞擊其他部隊 (連環車禍)
+    else if(occupant){
+      let cDmg = Math.floor(attacker.war * 4);
+      applyDamage(target, cDmg); applyDamage(occupant, cDmg);
+      showDamageText(target.x, target.y, `撞擊-${cDmg}`); showDamageText(occupant.x, occupant.y, `波及-${cDmg}`);
+      addLog(`<span class="log-collision">💥 連環車禍！[${target.name}] 撞上 [${occupant.name}]，雙方各受 ${cDmg} 傷害！</span>`);
     }
+    // 3. 撞擊城池
+    else if(cityOccupant){
+      let cDmg = Math.floor(attacker.war * 3);
+      applyDamage(target, cDmg); cityOccupant.hp -= cDmg;
+      showDamageText(target.x, target.y, `撞擊-${cDmg}`);
+      addLog(`<span class="log-collision">🏯 [${target.name}] 撞擊城牆，受到 ${cDmg} 傷害！</span>`);
+    }
+    // 4. 成功推移
+    else {
+      let oldTx = target.x, oldTy = target.y;
+      target.x = dest.x; target.y = dest.y;
+      addLog(`💨 [${target.name}] 被擊退至 (${dest.x}, ${dest.y})。`);
+      // 騎兵跟進
+      if(type === "cavalry"){
+        attacker.x = oldTx; attacker.y = oldTy;
+        addLog(`🐎 [${attacker.name}] 突擊推進！`);
+      }
+    }
+    renderUnits(); // 觸發 CSS 滑動動畫
+  }, 100); // 100ms 讓主攻擊數字先跳
+}
+
+function applyDamage(unit, dmg) {
+  unit.troops -= dmg;
+  if(unit.troops <= 0) {
+    unit.troops = 0;
+    addLog(`💀 <b>[${unit.name}] 部隊潰滅！</b>`);
+    // Remove DOM immediately for cleanup
+    if(unit.dom) { unit.dom.remove(); unit.dom = null; }
+  }
+}
+
+function resolveSiege(a, c, isTactic){
+  let dmg = Math.floor(a.lead * 10 + a.war * 4);
+  if(isTactic && a.type==="bow") dmg = Math.floor(dmg * 1.5);
+  if(a.type==="cavalry") dmg = Math.floor(dmg * 0.6);
+
+  c.hp = Math.max(0, c.hp - dmg);
+  showDamageText(c.x, c.y, `城防-${dmg}`);
+  addLog(`🏯 [${a.name}] 攻城，城防 -<span style="color:#ff5252">${dmg}</span>。`);
+
+  if(c.hp <= 0){
+    c.owner = a.faction; c.hp = c.maxHp; factions[c.owner].maxAp += 10;
+    addLog(`🚩 恭喜！${c.name} 被 ${a.faction} 軍攻陷！`);
+  }
+}
+
+function waitUnit(){ let u=units.find(u=>u.id===selectedId); if(u){ u.acted=true; addLog(`[${u.name}] 待命。`); cancelSelection(); } }
+
+function developCity(){
+  if(!consumeAP(20)) return;
+  let c=cities.find(c=>c.name===selectedCityName); let fac=factions[playerFaction];
+  if(fac.gold < 300) return addLog("金錢不足。");
+  fac.gold -= 300; c.dev += 15; addLog(`🔨 ${c.name} 開發：金-300，開發度上升。`); showCity(c); updateUI();
+}
+
+function recruit(){
+  if(!consumeAP(20)) return;
+  let c=cities.find(c=>c.name===selectedCityName); let fac=factions[playerFaction];
+  if(fac.food < 500) return addLog("糧草不足。");
+  fac.food -= 500; c.troops += 1000; addLog(`👥 ${c.name} 徵兵：糧-500，兵力+1000。`);
+  
+  if(!units.some(u=>u.x===c.x && u.y===c.y)){
+    let type = ["spear","pike","cavalry","bow"][Math.random()*4|0];
+    units.push(gen("新軍", playerFaction, c.x, c.y, type));
+    c.troops -= 3000; addLog(`🚩 於 ${c.name} 編組 [${type}]。`); renderUnits();
+  }
+  showCity(c); updateUI();
+}
+
+function showUnit(){
+  let u=units.find(u=>u.id===selectedId), p=document.getElementById("panel"); if(!u)return;
+  p.innerHTML=`<div style="font-size:16px;color:#ffd54f;margin-bottom:5px;border-bottom:1px solid #444"><b>${u.name}</b> (${u.faction})</div>
+  兵力: ${Math.floor(u.troops)} | 氣力: <span style="color:#e74c3c">${Math.floor(u.will)}</span><br>
+  兵種: ${{spear:"槍兵", pike:"戟兵", cavalry:"騎兵", bow:"弩兵"}[u.type]} | 狀態: ${u.acted?"<span style='color:#777'>已結束</span>":"<span style='color:#2ecc71'>可行動</span>"}<br>
+  統: ${Math.floor(u.lead)} | 武: ${Math.floor(u.war)} | 智: ${Math.floor(u.int)}<br>
+  特技: <span style="color:#f1c40f">${u.skill||"無"}</span>`;
+}
+
+function showCity(c){
+  document.getElementById("panel").innerHTML=`<div style="font-size:16px;color:#ffd54f;margin-bottom:5px;border-bottom:1px solid #444"><b>${c.name}</b> (${c.owner})</div>
+  耐久: ${Math.floor(c.hp)} / ${c.maxHp} | 開發: ${c.dev}<br>城內兵力: ${c.troops}`;
+}
+
+function endTurn(){
+  turn++; addLog(`<br><span style="color:#9b59b6;font-size:15px">=== 第 ${turn} 旬 開始 ===</span>`);
+  units = units.filter(u=>u.troops>0);
+
+  Object.keys(factions).forEach(f => { factions[f].ap = factions[f].maxAp; factions[f].gold+=200; factions[f].food+=500; });
+  units.forEach(u=>{ u.acted=false; u.will=Math.min(u.maxWill, u.will+5); let fac=factions[u.faction]; if(fac) fac.food = Math.max(0, fac.food-50); });
+
+  // 簡易 AI
+  units.filter(u=>u.faction!==playerFaction).forEach(u=>{
+    if(u.acted) return;
+    let targets = [...units.filter(v=>v.faction!==u.faction), ...cities.filter(c=>c.owner!==u.faction)];
+    if(!targets.length) return;
+    targets.sort((a,b)=> hexDist(u.x,u.y,a.x,a.y) - hexDist(u.x,u.y,b.x,b.y));
+    let t = targets[0];
+
+    let dist = hexDist(u.x, u.y, t.x, t.y);
+    if(dist > u.range && factions[u.faction].ap >= 10){
+       let moveDest = getPushDest(t.x, t.y, u.x, u.y); // Move towards target (simplified)
+       if(canMoveTo(moveDest.x, moveDest.y, u.type==="cavalry")) { u.x=moveDest.x; u.y=moveDest.y; factions[u.faction].ap-=5; }
+    }
+    dist = hexDist(u.x, u.y, t.x, t.y);
+    if(dist <= u.range && factions[u.faction].ap >= 10){
+      if(t.owner) resolveSiege(u, t, false); else resolveCombat(u, t, false);
+      factions[u.faction].ap-=10;
+    }
+    u.acted=true;
   });
 
-  document.getElementById("turn").innerText="回合: "+turn;
-  document.getElementById("faction").innerText="勢力: "+playerFaction;
-  document.getElementById("modeText").innerText=
-    `模式: ${mode==="move"?"🟢 移動模式":mode==="attack"?"🔴 攻擊模式":"⚪ 待機"}`;
+  units = units.filter(u=>u.troops>0);
+  cancelSelection(); renderUnits(); updateUI();
+}
 
-  let r=resources[playerFaction]||{gold:0,food:0};
-  document.getElementById("goldFood").innerText=`金: ${Math.floor(r.gold)} | 糧: ${Math.floor(r.food)}`;
+function renderMap(){
+  mapCells.forEach((c, i)=>{
+    let x = i%SIZE_W, y = Math.floor(i/SIZE_W);
+    c.className = "hex " + getTerrain(x,y);
+    if(reachableTiles.has(`${x},${y}`)) c.classList.add("reachable");
+    if(attackableTiles.has(`${x},${y}`)) c.classList.add("attackable");
+    if(selectedId && units.find(u=>u.id===selectedId).x===x && units.find(u=>u.id===selectedId).y===y) c.classList.add("selected-hex");
+  });
+  updateUI();
+}
+
+function renderUnits(){
+  const layer = document.getElementById("unit-layer");
+  units.forEach(u => {
+    if(!u.dom) {
+      u.dom = document.createElement("div");
+      u.dom.innerText = u.type==="cavalry"?"🐎":u.type==="bow"?"🏹":"⚔️";
+      u.dom.onclick = (e) => { if(!isDragging()) clickGrid(u.x, u.y); e.stopPropagation(); };
+      u.dom.oncontextmenu = (e) => { cancelSelection(e); e.stopPropagation(); };
+      layer.appendChild(u.dom);
+    }
+    // Set class
+    u.dom.className = `unit-marker ${u.faction===playerFaction ? 'faction-player':'faction-enemy'} ${u.id===selectedId ? 'selected':''} ${u.acted ? 'unit-acted':''}`;
+    // Physics Slide Animation Math (Hex Center)
+    let px = u.x * HEX_W + (u.y % 2 === 1 ? HEX_W / 2 : 0) + (HEX_W - 34)/2;
+    let py = u.y * HEX_H * 0.75 + (HEX_H - 34)/2;
+    u.dom.style.transform = `translate(${px}px, ${py}px)`;
+  });
+}
+
+function updateUI(){
+  document.getElementById("turn").innerText=`第 ${turn} 旬`;
+  let fac = factions[playerFaction];
+  document.getElementById("apDisplay").innerText=`行動力: ${fac.ap} / ${fac.maxAp}`;
+  document.getElementById("goldFood").innerText=`金: ${fac.gold} | 糧: ${fac.food}`;
 }
 
 init();
